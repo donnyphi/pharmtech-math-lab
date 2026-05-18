@@ -7,25 +7,56 @@ Run with:
 
 import streamlit as st
 
-from problems import TOPICS, generate_problem
+from chapters import CHAPTERS, CHAPTERS_LIST, get_chapter, get_problem_type
 from tracker import (
     init_tracker,
     record_attempt,
-    pick_adaptive_topic,
-    get_weak_topics,
+    pick_adaptive_chapter,
+    pick_adaptive_problem_type,
+    get_weak_chapters,
 )
 
 st.set_page_config(page_title="Pharmacy Tech Math Practice", page_icon="💊")
 init_tracker()
 
 
-def new_problem(topic_label):
-    """Generate a new problem based on the user's topic selection."""
-    if topic_label == "Adaptive (recommended)":
-        topic_key = pick_adaptive_topic()
+MIXED_LABEL = "Mixed — adaptive across all chapters"
+ADAPTIVE_TYPE_LABEL = "Adaptive (recommended)"
+
+
+def chapter_label(chapter):
+    """How a chapter is shown in the UI dropdown."""
+    return f"Ch. {chapter.number}. {chapter.title}"
+
+
+def find_chapter_by_label(label):
+    return next(c for c in CHAPTERS_LIST if chapter_label(c) == label)
+
+
+def new_problem(chapter_choice, problem_type_choice):
+    """Resolve user selections into a concrete problem and store it in session state."""
+    if chapter_choice == MIXED_LABEL:
+        chapter_key = pick_adaptive_chapter()
+        chapter = get_chapter(chapter_key)
+        pt_key = pick_adaptive_problem_type(chapter)
     else:
-        topic_key = next(key for key, label in TOPICS.items() if label == topic_label)
-    st.session_state.current_problem = generate_problem(topic_key)
+        chapter = find_chapter_by_label(chapter_choice)
+        if problem_type_choice == ADAPTIVE_TYPE_LABEL:
+            pt_key = pick_adaptive_problem_type(chapter)
+        else:
+            pt_key = next(pt.key for pt in chapter.problem_types if pt.label == problem_type_choice)
+
+    problem_type = get_problem_type(chapter.key, pt_key)
+    problem = problem_type.generator()
+
+    # Attach routing/tracking metadata for the app to use later.
+    problem["chapter_key"] = chapter.key
+    problem["problem_type_key"] = pt_key
+    problem["chapter_title"] = chapter.title
+    problem["chapter_number"] = chapter.number
+    problem["problem_type_label"] = problem_type.label
+
+    st.session_state.current_problem = problem
     st.session_state.last_result = None
     st.session_state.input_version += 1
 
@@ -41,35 +72,41 @@ page = st.sidebar.radio("Mode", ["Practice", "Dose-to-Volume", "Progress"])
 if page == "Practice":
     st.title("Practice problems")
 
-    topic_label = st.selectbox(
-        "Topic",
-        ["Adaptive (recommended)"] + list(TOPICS.values()),
-        help="Adaptive mode picks weaker topics more often.",
-    )
+    chapter_options = [MIXED_LABEL] + [chapter_label(c) for c in CHAPTERS_LIST]
+    chapter_choice = st.selectbox("Chapter", chapter_options)
+
+    # Show the problem-type selector only when a specific chapter is picked.
+    problem_type_choice = ADAPTIVE_TYPE_LABEL
+    if chapter_choice != MIXED_LABEL:
+        chapter = find_chapter_by_label(chapter_choice)
+        with st.expander(chapter.summary, expanded=False):
+            st.caption("Learn and Guided Examples for this chapter are coming soon.")
+        type_options = [ADAPTIVE_TYPE_LABEL] + [pt.label for pt in chapter.problem_types]
+        problem_type_choice = st.selectbox("Problem type", type_options)
 
     # Generate the first problem on initial load.
     if st.session_state.current_problem is None:
-        new_problem(topic_label)
+        new_problem(chapter_choice, problem_type_choice)
 
     problem = st.session_state.current_problem
-    st.subheader(TOPICS[problem["topic"]])
+    st.caption(
+        f"Ch. {problem['chapter_number']} · {problem['chapter_title']} · "
+        f"{problem['problem_type_label']}"
+    )
     st.write(problem["question"])
 
-    # Two states: answering vs. reviewing feedback.
+    # Two display states: answering vs. reviewing feedback.
     if st.session_state.last_result is None:
         user_answer = st.number_input(
             f"Your answer ({problem['unit']})",
-            value=0.0,
-            step=0.1,
-            format="%.2f",
+            value=0.0, step=0.1, format="%.2f",
             key=f"answer_input_{st.session_state.input_version}",
         )
         if st.button("Check answer", type="primary"):
             correct_value = problem["answer"]
-            # Tolerance: 1% of the answer with an absolute floor.
             tolerance = max(abs(correct_value) * 0.01, problem["tolerance"])
             is_correct = abs(user_answer - correct_value) <= tolerance
-            record_attempt(problem["topic"], is_correct)
+            record_attempt(problem["chapter_key"], problem["problem_type_key"], is_correct)
             st.session_state.last_result = {
                 "correct": is_correct,
                 "user_answer": user_answer,
@@ -93,11 +130,11 @@ if page == "Practice":
             for step in result["steps"]:
                 st.write(f"• {step}")
         if st.button("Next problem", type="primary"):
-            new_problem(topic_label)
+            new_problem(chapter_choice, problem_type_choice)
             st.rerun()
 
 
-# -------- Dose-to-Volume page --------
+# -------- Dose-to-Volume calculator --------
 elif page == "Dose-to-Volume":
     st.title("Dose-to-Volume calculator")
     st.caption("Quick reference. Results here are not tracked in practice stats.")
@@ -120,25 +157,38 @@ elif page == "Progress":
     cols[0].metric("Current streak", st.session_state.streak)
     cols[1].metric("Best streak", st.session_state.best_streak)
 
-    st.subheader("Accuracy by topic")
-    for topic_key, label in TOPICS.items():
-        stats = st.session_state.stats[topic_key]
-        if stats["attempts"] == 0:
-            st.write(f"**{label}** — not attempted yet")
-        else:
-            accuracy = stats["correct"] / stats["attempts"]
-            st.write(
-                f"**{label}** — {stats['correct']}/{stats['attempts']} "
-                f"correct ({accuracy:.0%})"
-            )
-            st.progress(accuracy)
+    st.subheader("Accuracy by chapter")
+    for chapter in CHAPTERS_LIST:
+        overall = st.session_state.stats[chapter.key]["_overall"]
+        header = f"**Ch. {chapter.number}. {chapter.title}**"
+        if overall["attempts"] == 0:
+            st.write(f"{header} — not attempted yet")
+            continue
+        accuracy = overall["correct"] / overall["attempts"]
+        st.write(
+            f"{header} — {overall['correct']}/{overall['attempts']} correct ({accuracy:.0%})"
+        )
+        st.progress(accuracy)
+        with st.expander("Breakdown by problem type"):
+            for pt in chapter.problem_types:
+                s = st.session_state.stats[chapter.key][pt.key]
+                if s["attempts"] == 0:
+                    st.write(f"  • {pt.label}: not attempted")
+                else:
+                    pt_acc = s["correct"] / s["attempts"]
+                    st.write(
+                        f"  • {pt.label}: {s['correct']}/{s['attempts']} ({pt_acc:.0%})"
+                    )
 
-    weak = get_weak_topics()
+    weak = get_weak_chapters()
     if weak:
-        st.subheader("Topics to focus on")
-        for topic_key, accuracy in weak:
-            st.write(f"• {TOPICS[topic_key]} — {accuracy:.0%} accuracy")
+        st.subheader("Chapters to focus on")
+        for chapter_key, accuracy in weak:
+            chapter = CHAPTERS[chapter_key]
+            st.write(
+                f"• Ch. {chapter.number}. {chapter.title} — {accuracy:.0%} accuracy"
+            )
     else:
         st.caption(
-            "Attempt at least 3 problems in a topic to see weak-topic recommendations."
+            "Attempt at least 3 problems in a chapter to see weak-chapter recommendations."
         )
