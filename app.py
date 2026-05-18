@@ -321,9 +321,9 @@ def _render_hero():
             'DoseDrill: pharmacy math, practiced with purpose.'
             '</h1>'
             '<p style="margin:1rem 0 0; font-size:1.05rem; line-height:1.55; opacity:0.78;">'
-            'Build accuracy in dosage calculations, reconstitution, dilutions, IV rates, '
-            'and more — with hints, review queues, and mastery tracking.'
-            '</p>'
+'Build accuracy with 500+ randomized pharmacy math question variants across '
+'dosage calculations, reconstitution, dilutions, IV rates, and more — with hints, review queues, and mastery tracking.'
+'</p>'
             '</div>',
             unsafe_allow_html=True,
         )
