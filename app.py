@@ -364,8 +364,7 @@ def _render_feature_highlights():
 
     features = [
         ("🔁", "Unlimited Practice",
-         "Randomized pharmacy math problems let you keep practicing until "
-         "the setup feels automatic."),
+ "Randomized pharmacy math problems help you build speed and confidence."),
         ("💡", "Hints Before Answers",
          "Wrong answers trigger hints and retry chances before the full "
          "solution is revealed."),
