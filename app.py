@@ -45,7 +45,7 @@ from tracker import (
 )
 
 st.set_page_config(
-    page_title="Pharmacy Tech Math Practice",
+    page_title="DoseDrill",
     page_icon="💊",
     layout="wide",
 )
@@ -200,7 +200,7 @@ def _on_nav_change():
 
 
 with st.sidebar:
-    st.title("💊 Pharmacy Math")
+    st.title("💊 DoseDrill")
 
     st.markdown("**📊 This session**")
     row1 = st.columns(2)
@@ -318,7 +318,7 @@ def _render_hero():
         st.markdown(
             '<div style="padding: 1rem 0.25rem 0.5rem;">'
             '<h1 style="margin:0; font-size:2.1rem; line-height:1.2; font-weight:700;">'
-            'Pharmacy math, practiced with purpose.'
+            'DoseDrill: pharmacy math, practiced with purpose.'
             '</h1>'
             '<p style="margin:1rem 0 0; font-size:1.05rem; line-height:1.55; opacity:0.78;">'
             'Build accuracy in dosage calculations, reconstitution, dilutions, IV rates, '
