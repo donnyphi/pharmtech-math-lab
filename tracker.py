@@ -43,6 +43,36 @@ def init_tracker():
         # Incremented each time we generate a new problem so the input widget resets.
         st.session_state.input_version = 0
 
+    # Navigation state
+    if "selected_chapter_key" not in st.session_state:
+        st.session_state.selected_chapter_key = None    # None = show chapter grid
+    if "mixed_mode" not in st.session_state:
+        st.session_state.mixed_mode = False
+    if "problem_type_choice" not in st.session_state:
+        st.session_state.problem_type_choice = "_adaptive"
+
+    # Helper-button toggles (reset on every new problem)
+    if "show_formula" not in st.session_state:
+        st.session_state.show_formula = False
+    if "show_hint" not in st.session_state:
+        st.session_state.show_hint = False
+    if "show_example" not in st.session_state:
+        st.session_state.show_example = False
+    if "example_problem" not in st.session_state:
+        st.session_state.example_problem = None
+
+
+def reset_helpers():
+    """Clear the three helper toggles and the cached example problem.
+
+    Call this whenever a new problem is generated so the formula/hint/example
+    panels close and the worked example regenerates fresh next time.
+    """
+    st.session_state.show_formula = False
+    st.session_state.show_hint = False
+    st.session_state.show_example = False
+    st.session_state.example_problem = None
+
 
 def record_attempt(chapter_key, problem_type_key, is_correct):
     """Update both the problem-type stats and the chapter rollup."""
@@ -111,3 +141,38 @@ def get_weak_chapters(threshold=0.7, min_attempts=3):
             if accuracy < threshold:
                 weak.append((chapter.key, accuracy))
     return sorted(weak, key=lambda pair: pair[1])
+
+
+def total_attempts():
+    """Total problems answered across every chapter and problem type."""
+    return sum(
+        st.session_state.stats[c.key]["_overall"]["attempts"]
+        for c in CHAPTERS_LIST
+    )
+
+
+def current_accuracy():
+    """Overall accuracy across the entire session, or None if no attempts yet."""
+    attempts = total_attempts()
+    if attempts == 0:
+        return None
+    correct = sum(
+        st.session_state.stats[c.key]["_overall"]["correct"]
+        for c in CHAPTERS_LIST
+    )
+    return correct / attempts
+
+
+def recommend_weak_topic():
+    """Return a short label naming the weakest chapter, or None if there isn't enough data.
+
+    Used by the right-side stats panel to surface a single 'focus here next' hint.
+    """
+    weak = get_weak_chapters(threshold=0.85, min_attempts=3)
+    if not weak:
+        return None
+    chapter_key, _accuracy = weak[0]
+    # Local import to avoid circular dependency at module-load time.
+    from chapters import CHAPTERS
+    chapter = CHAPTERS[chapter_key]
+    return f"Ch. {chapter.number} — {chapter.title}"
