@@ -21,10 +21,14 @@ from tracker import (
     pick_adaptive_chapter,
     pick_adaptive_problem_type,
     chapter_accuracy,
+    chapter_mastery,
+    chapter_status,
+    difficulty_tolerance_multiplier,
     get_weak_chapters,
     total_attempts,
     current_accuracy,
     recommend_weak_topic,
+    recommended_focus_chapter,
 )
 
 st.set_page_config(
@@ -96,9 +100,11 @@ def start_mixed():
 
 
 def check_answer(problem, user_answer):
-    """Verify the answer and store the result. Math preserved from v3."""
+    """Verify the answer and store the result. Math preserved from v3,
+    with the difficulty multiplier added on top of the textbook tolerance."""
     correct_value = problem["answer"]
-    tolerance = max(abs(correct_value) * 0.01, problem["tolerance"])
+    base_tolerance = max(abs(correct_value) * 0.01, problem["tolerance"])
+    tolerance = base_tolerance * difficulty_tolerance_multiplier()
     is_correct = abs(user_answer - correct_value) <= tolerance
     record_attempt(problem["chapter_key"], problem["problem_type_key"], is_correct)
     st.session_state.last_result = {
@@ -111,17 +117,48 @@ def check_answer(problem, user_answer):
 
 
 # ============================================================
-# Sidebar (simple: streaks + nav)
+# Sidebar dashboard (session metrics + difficulty + nav)
 # ============================================================
 
 with st.sidebar:
     st.title("💊 Pharmacy Math")
-    st.metric("Current streak", st.session_state.streak)
-    st.metric("Best streak", st.session_state.best_streak)
-    st.write("")
+
+    # Session metrics — 2x2 grid of compact metrics
+    st.markdown("**📊 This session**")
+    row1 = st.columns(2)
+    row1[0].metric("Answered", total_attempts())
+    acc = current_accuracy()
+    row1[1].metric("Accuracy", f"{acc:.0%}" if acc is not None else "—")
+    row2 = st.columns(2)
+    row2[0].metric("Streak", st.session_state.streak)
+    row2[1].metric("Best", st.session_state.best_streak)
+
+    st.divider()
+
+    # Recommended focus — short hint at the weakest chapter
+    st.markdown("**⭐ Recommended focus**")
+    weak = recommend_weak_topic()
+    if weak:
+        st.markdown(f"_{weak}_")
+    else:
+        st.caption("Practice more to see recommendations.")
+
+    st.divider()
+
+    # Difficulty selector — bound directly to session state via key.
+    st.markdown("**🎯 Difficulty**")
+    st.radio(
+        "Difficulty",
+        ["Beginner", "Standard", "Challenge"],
+        key="difficulty",
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+
     page = st.radio(
         "Navigate",
-        ["Practice", "Dose-to-Volume", "Progress"],
+        ["Practice", "Calculator", "Progress"],
         label_visibility="collapsed",
     )
 
@@ -132,26 +169,69 @@ with st.sidebar:
 
 def render_chapter_grid():
     st.title("Choose a chapter")
-    st.caption("Pick mixed practice for adaptive drilling, or jump into a specific chapter.")
+    st.caption("Pick mixed practice, jump to a recommended focus, or browse the chapter list.")
     st.write("")
 
-    # Mixed practice card — full width
-    with st.container(border=True):
-        c_text, c_btn = st.columns([4, 1])
-        with c_text:
-            st.markdown("### 🎯  Mixed practice")
-            st.caption("Adaptive across all chapters. Focuses on your weakest topics first.")
-        with c_btn:
-            st.write("")  # vertical spacer
-            if st.button("Start", key="start_mixed", type="primary", use_container_width=True):
-                start_mixed()
-                st.rerun()
+    # Recommended Focus + Mixed Practice cards. Side-by-side if there's data
+    # to recommend from, otherwise Mixed Practice goes full width.
+    focus_key = recommended_focus_chapter()
+    if focus_key:
+        focus_chapter = get_chapter(focus_key)
+        focus_emoji, focus_status = chapter_status(focus_key)
+        focus_mastery = chapter_mastery(focus_key)
+
+        col_focus, col_mixed = st.columns(2)
+        with col_focus:
+            with st.container(border=True):
+                st.markdown("### ⭐  Recommended focus")
+                st.caption("Your weakest attempted chapter. Practice here to level up fast.")
+                st.markdown(f"**Ch. {focus_chapter.number} — {focus_chapter.title}**")
+                st.markdown(f"{focus_emoji} {focus_status}  •  Mastery: {focus_mastery}")
+                if st.button(
+                    "Practice this →",
+                    key="start_focus",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    start_chapter(focus_key)
+                    st.rerun()
+        with col_mixed:
+            with st.container(border=True):
+                st.markdown("### 🎯  Mixed practice")
+                st.caption("Adaptive across all chapters. Drills your weakest topics first.")
+                st.write("")
+                st.write("")
+                if st.button(
+                    "Start mixed",
+                    key="start_mixed",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    start_mixed()
+                    st.rerun()
+    else:
+        # No attempts yet — single full-width Mixed practice card.
+        with st.container(border=True):
+            c_text, c_btn = st.columns([4, 1])
+            with c_text:
+                st.markdown("### 🎯  Mixed practice")
+                st.caption("Adaptive across all chapters. Focuses on your weakest topics first.")
+            with c_btn:
+                st.write("")
+                if st.button(
+                    "Start",
+                    key="start_mixed",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    start_mixed()
+                    st.rerun()
 
     st.write("")
     st.markdown("##### Or pick a specific chapter")
     st.write("")
 
-    # 2-column grid of chapter cards
+    # 2-column grid of chapter cards, each showing status + mastery
     for row_start in range(0, len(CHAPTERS_LIST), 2):
         row = CHAPTERS_LIST[row_start:row_start + 2]
         cols = st.columns(2)
@@ -161,11 +241,19 @@ def render_chapter_grid():
                     st.caption(f"Chapter {chapter.number}")
                     st.markdown(f"#### {chapter.title}")
                     st.caption(chapter.summary)
-                    acc = chapter_accuracy(chapter.key)
-                    if acc is None:
-                        st.caption("_Not started_")
+
+                    emoji, status_label = chapter_status(chapter.key)
+                    mastery = chapter_mastery(chapter.key)
+                    overall = st.session_state.stats[chapter.key]["_overall"]
+
+                    if overall["attempts"] == 0:
+                        st.markdown(f"{emoji} **{status_label}**")
                     else:
-                        st.progress(acc, text=f"Accuracy: {acc:.0%}")
+                        st.markdown(
+                            f"{emoji} **{status_label}**  •  Mastery: {mastery}"
+                        )
+                        st.progress(mastery / 100)
+
                     if st.button(
                         "Practice →",
                         key=f"start_{chapter.key}",
@@ -200,19 +288,12 @@ def render_practice_view():
 
     st.write("")
 
-    # Main area + stats panel
-    main_col, stats_col = st.columns([3, 1])
-
-    with main_col:
-        render_problem_card(chapter, problem)
-        # Work-it-out: only after a wrong answer AND only if a prerequisite is defined.
-        result = st.session_state.last_result
-        if result is not None and not result["correct"] and chapter.prerequisite_chapter:
-            st.write("")
-            render_work_it_out(chapter)
-
-    with stats_col:
-        render_stats_panel()
+    # Single-column main area. Stats now live in the sidebar dashboard.
+    render_problem_card(chapter, problem)
+    result = st.session_state.last_result
+    if result is not None and not result["correct"] and chapter.prerequisite_chapter:
+        st.write("")
+        render_work_it_out(chapter)
 
 
 def render_problem_card(chapter, problem):
@@ -355,24 +436,6 @@ def render_helper_content(chapter, problem):
             st.success(f"Answer: {ex['answer']} {ex['unit']}")
 
 
-def render_stats_panel():
-    """Right-side panel showing live session stats."""
-    with st.container(border=True):
-        st.markdown("##### 📊 Session stats")
-        st.metric("Questions answered", total_attempts())
-        st.metric("Current streak", st.session_state.streak)
-        st.metric("Best streak", st.session_state.best_streak)
-        acc = current_accuracy()
-        st.metric("Accuracy", f"{acc:.0%}" if acc is not None else "—")
-        st.divider()
-        st.caption("**Recommended focus**")
-        weak = recommend_weak_topic()
-        if weak:
-            st.markdown(f"*{weak}*")
-        else:
-            st.caption("Keep practicing to see recommendations.")
-
-
 def render_work_it_out(chapter):
     """Recommend the prerequisite chapter after a wrong answer."""
     prereq = get_chapter(chapter.prerequisite_chapter)
@@ -409,10 +472,10 @@ if page == "Practice":
 
 
 # ============================================================
-# Dose-to-Volume calculator — unchanged from v3
+# Calculator (dose-to-volume) — unchanged from v3
 # ============================================================
 
-elif page == "Dose-to-Volume":
+elif page == "Calculator":
     st.title("Dose-to-Volume calculator")
     st.caption("Quick reference. Results here are not tracked in practice stats.")
     dose = st.number_input("Ordered dose (mg)", min_value=0.0, value=500.0, step=10.0)
