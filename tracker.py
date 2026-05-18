@@ -61,6 +61,10 @@ def init_tracker():
     if "example_problem" not in st.session_state:
         st.session_state.example_problem = None
 
+    # Difficulty selector (affects answer-check tolerance only).
+    if "difficulty" not in st.session_state:
+        st.session_state.difficulty = "Standard"
+
 
 def reset_helpers():
     """Clear the three helper toggles and the cached example problem.
@@ -126,6 +130,52 @@ def chapter_accuracy(chapter_key):
     return None if s["attempts"] == 0 else s["correct"] / s["attempts"]
 
 
+def chapter_mastery(chapter_key):
+    """Mastery score 0-100, combining accuracy and practice volume.
+
+    Formula:  mastery = accuracy × confidence × 100
+    where confidence = min(attempts / 10, 1.0).
+
+    A student with 100% accuracy but only 3 attempts has mastery = 30,
+    not 100 — because we don't have enough evidence yet. By 10 attempts,
+    confidence saturates and mastery == accuracy × 100.
+    """
+    s = st.session_state.stats[chapter_key]["_overall"]
+    if s["attempts"] == 0:
+        return 0
+    accuracy = s["correct"] / s["attempts"]
+    confidence = min(s["attempts"] / 10, 1.0)
+    return round(accuracy * confidence * 100)
+
+
+def chapter_status(chapter_key):
+    """Return (emoji, label) for a chapter's status. Used on chapter cards."""
+    s = st.session_state.stats[chapter_key]["_overall"]
+    if s["attempts"] == 0:
+        return "⚪", "Not started"
+    mastery = chapter_mastery(chapter_key)
+    if mastery >= 85:
+        return "🟢", "Mastered"
+    if mastery >= 60:
+        return "🔵", "Strong"
+    if mastery >= 30:
+        return "🟡", "Building"
+    return "🟠", "Needs practice"
+
+
+def difficulty_tolerance_multiplier():
+    """How the difficulty setting scales answer-check tolerance.
+
+    Beginner gets a wider tolerance (more forgiving rounding).
+    Challenge demands tighter precision. Standard is the textbook tolerance.
+    """
+    return {
+        "Beginner": 2.0,
+        "Standard": 1.0,
+        "Challenge": 0.5,
+    }.get(st.session_state.difficulty, 1.0)
+
+
 def problem_type_accuracy(chapter_key, problem_type_key):
     s = st.session_state.stats[chapter_key][problem_type_key]
     return None if s["attempts"] == 0 else s["correct"] / s["attempts"]
@@ -163,16 +213,33 @@ def current_accuracy():
     return correct / attempts
 
 
-def recommend_weak_topic():
-    """Return a short label naming the weakest chapter, or None if there isn't enough data.
+def recommended_focus_chapter():
+    """Return the chapter key of the weakest attempted chapter, or None.
 
-    Used by the right-side stats panel to surface a single 'focus here next' hint.
+    Used by both the sidebar dashboard (display string) and the chapter-grid
+    Recommended Focus card. Picks the attempted chapter with the lowest
+    mastery score, but only if it's below the 'Mastered' threshold.
     """
-    weak = get_weak_chapters(threshold=0.85, min_attempts=3)
-    if not weak:
+    attempted = [
+        (c.key, chapter_mastery(c.key))
+        for c in CHAPTERS_LIST
+        if st.session_state.stats[c.key]["_overall"]["attempts"] > 0
+    ]
+    if not attempted:
         return None
-    chapter_key, _accuracy = weak[0]
+    attempted.sort(key=lambda pair: pair[1])
+    weakest_key, mastery = attempted[0]
+    if mastery >= 85:
+        return None  # everything is solid, no recommendation needed
+    return weakest_key
+
+
+def recommend_weak_topic():
+    """Return a short display label for the recommended focus chapter, or None."""
+    key = recommended_focus_chapter()
+    if not key:
+        return None
     # Local import to avoid circular dependency at module-load time.
     from chapters import CHAPTERS
-    chapter = CHAPTERS[chapter_key]
+    chapter = CHAPTERS[key]
     return f"Ch. {chapter.number} — {chapter.title}"
