@@ -45,6 +45,10 @@ class Chapter:
     summary: str                                   # one-line description
     problem_types: List[ProblemType]               # one or more problem types
 
+    # Helper content for the UI.
+    formula: str = ""                                 # shown by the "Show formula" button
+    prerequisite_chapter: Optional[str] = None        # chapter key of a foundational chapter
+
     # Future hooks. Leave as None until implemented.
     learn_content: Optional[str] = None
     guided_examples: Optional[List[dict]] = None
@@ -1159,6 +1163,12 @@ _CH01 = Chapter(
     number=1,
     title="Parenteral Doses Using Ratio and Proportion Calculations",
     summary="Calculate injection volumes using ratio and proportion, including unit conversions and units/mEq dosing.",
+    formula=(
+        "stock concentration / 1 mL  =  ordered dose / X.\n\n"
+        "Cross multiply, then divide both sides by the stock concentration "
+        "and cancel out the units."
+    ),
+    prerequisite_chapter=None,  # this chapter IS the foundation
     problem_types=[
         ProblemType("mg_per_ml_same_units", "Order in mg, stock in mg/mL (same units)", gen_mg_dose_mg_per_ml),
         ProblemType("with_unit_conversion", "Different units (convert g/mg/mcg first)", gen_dose_with_unit_conversion),
@@ -1171,6 +1181,8 @@ _CH02 = Chapter(
     number=2,
     title="Powdered Drug Preparations",
     summary="Reconstitution problems using FV = DV + PV: find powder volume, concentration, or required diluent.",
+    formula="Final volume = Diluent volume + Powder volume  (FV = DV + PV)",
+    prerequisite_chapter="parenteral_ratio",
     problem_types=[
         ProblemType("powder_volume", "Find the powder volume", gen_powder_volume),
         ProblemType("concentration", "Find concentration after reconstitution", gen_concentration_after_reconstitution),
@@ -1183,6 +1195,11 @@ _CH03 = Chapter(
     number=3,
     title="Calculations with Percents",
     summary="Percentage strength means grams of solute per 100 mL: find solute, find percent, or find volume for a dose.",
+    formula=(
+        "Percentage strength means grams of solute per 100 mL.\n\n"
+        "Set up:  % g / 100 mL  =  X / volume in mL."
+    ),
+    prerequisite_chapter=None,
     problem_types=[
         ProblemType("grams_from_percent", "Grams of solute from % w/v and volume", gen_grams_from_percent),
         ProblemType("percent_from_grams", "Percentage strength from grams and volume", gen_percent_from_grams_and_volume),
@@ -1195,6 +1212,11 @@ _CH04 = Chapter(
     number=4,
     title="Using Ratio and Proportion when Preparing Solutions",
     summary="Work with ratio-strength solutions (1:N w/v): find grams, volume for a dose, or convert to %.",
+    formula=(
+        "1:N w/v means 1 g per N mL.\n\n"
+        "When the order is in milligrams, convert: 1:N  =  1,000 mg / N mL."
+    ),
+    prerequisite_chapter="percents",
     problem_types=[
         ProblemType("grams_for_solution", "Grams needed to prepare a 1:N w/v solution", gen_grams_for_ratio_solution),
         ProblemType("volume_for_dose", "Volume needed for a dose from a 1:N solution", gen_volume_for_dose_from_ratio),
@@ -1207,6 +1229,11 @@ _CH05 = Chapter(
     number=5,
     title="Dosage Calculations Based on Body Weight",
     summary="Calculate doses from mg/kg orders. Convert lb to kg using 1 kg = 2.2 lb when needed.",
+    formula=(
+        "Conversion: 1 kg = 2.2 lb.\n\n"
+        "Dose in mg  =  (mg/kg)  ×  weight in kg."
+    ),
+    prerequisite_chapter="parenteral_ratio",
     problem_types=[
         ProblemType("weight_in_kg", "Patient weight in kg (no conversion needed)", gen_dose_in_kg),
         ProblemType("weight_in_lb", "Patient weight in lb (convert to kg first)", gen_dose_with_lb_to_kg_conversion),
@@ -1219,6 +1246,11 @@ _CH06 = Chapter(
     number=6,
     title="Dosage Calculations Based on Body Surface Area",
     summary="Use BSA (m²) with mg/m² orders. BSA is obtained from a nomogram and given in the problem.",
+    formula=(
+        "Dose in mg  =  (mg/m²)  ×  BSA in m².\n\n"
+        "Set up: mg / 1 m²  =  X / BSA m²."
+    ),
+    prerequisite_chapter="body_weight",
     problem_types=[
         ProblemType("dose_from_bsa", "Dose in mg from BSA and mg/m²", gen_dose_from_bsa),
         ProblemType("volume_from_bsa", "Find mL needed for a BSA dose", gen_volume_from_bsa_dose),
@@ -1230,6 +1262,11 @@ _CH07 = Chapter(
     number=7,
     title="Infusion Rates and Drip Rates",
     summary="Calculate flow rates (mL/hr), drip rates (gtt/min) using a two-step proportion, and infusion times.",
+    formula=(
+        "mL/hr  =  Volume / Time.\n\n"
+        "gtt/min: convert mL/hr → mL/min (÷ 60), then multiply by the drop factor (gtt/mL)."
+    ),
+    prerequisite_chapter="parenteral_ratio",
     problem_types=[
         ProblemType("flow_rate_mlhr", "Flow rate in mL/hr", gen_flow_rate_mlhr),
         ProblemType("drip_rate_gttmin", "Drip rate in gtt/min (two-step calculation)", gen_drip_rate_gttmin),
@@ -1242,6 +1279,11 @@ _CH08 = Chapter(
     number=8,
     title="Dilutions",
     summary="Dilution problems using the grams method: find new % after dilution, or water needed to reach a target %.",
+    formula=(
+        "Step 1: grams in original  =  (% × volume) / 100.\n\n"
+        "Step 2: new %  =  (grams × 100) / new volume in mL."
+    ),
+    prerequisite_chapter="percents",
     problem_types=[
         ProblemType("final_percent", "Final % after dilution to a new total volume", gen_final_percent_after_dilution),
         ProblemType("water_to_add", "Water to add to reach a target %", gen_water_to_add_for_target_percent),
@@ -1253,6 +1295,11 @@ _CH09 = Chapter(
     number=9,
     title="Parenteral Nutrition Calculations",
     summary="TPN calculations: additive volumes from mEq orders, and grams of dextrose or amino acids in base solutions.",
+    formula=(
+        "Additives: stock mEq/mL  =  ordered mEq / X (ratio and proportion).\n\n"
+        "Base solutions: % strength means grams per 100 mL."
+    ),
+    prerequisite_chapter="percents",
     problem_types=[
         ProblemType("additive_volume", "mL of additive from an mEq order", gen_additive_volume_from_mEq),
         ProblemType("grams_in_base", "Grams of dextrose or amino acid in a base solution", gen_grams_in_base_solution),
@@ -1264,6 +1311,11 @@ _CH10 = Chapter(
     number=10,
     title="Dosage Calculations from Medication Labels",
     summary="Read concentration from a label and calculate the volume needed. Convert units when label and order disagree.",
+    formula=(
+        "Match units first (convert g ↔ mg ↔ mcg if needed).\n\n"
+        "Then: label amount / label volume  =  ordered amount / X."
+    ),
+    prerequisite_chapter="parenteral_ratio",
     problem_types=[
         ProblemType("same_units", "Label and order use the same units", gen_label_same_units),
         ProblemType("different_units", "Label and order use different units (convert first)", gen_label_different_units),
