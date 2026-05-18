@@ -1,7 +1,9 @@
 # Pharmacy Tech Math Practice
 
-An adaptive practice app for pharmacy technician math. Built with Streamlit and
-plain Python — no database, no external APIs, no patient data.
+Adaptive practice app for pharmacy technician math, organized around
+curriculum chapters. Solution steps follow the textbook's universal
+ratio-and-proportion format. Built with Streamlit and plain Python. No
+database, no external APIs, no patient data.
 
 ## Run it
 
@@ -10,44 +12,74 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The browser opens automatically at `http://localhost:8501`.
+## File layout
 
-## Files
+```
+app.py              Streamlit UI. Practice, Dose-to-Volume, Progress.
+tracker.py          Session state, stats, streak, adaptive selection.
+chapters/
+  __init__.py       Imports each chapter, exposes CHAPTERS_LIST / CHAPTERS.
+  base.py           Chapter and ProblemType dataclasses.
+  ch01_parenteral.py through ch10_labels.py
+                    One file per curriculum chapter.
+requirements.txt    Just streamlit.
+```
 
-| File | What it does |
-|------|--------------|
-| `app.py` | Streamlit UI. Three modes: Practice, Dose-to-Volume, Progress. |
-| `problems.py` | One generator function per topic. Each returns a question, answer, unit, and step-by-step solution. |
-| `tracker.py` | Session-state setup, streak logic, and the adaptive topic picker. |
-| `requirements.txt` | Just `streamlit`. |
+## Solution format
 
-## How it works
+Every chapter follows the textbook's universal method:
 
-**Topics covered:** unit conversion, tablet dose calculation, percent strength
-(w/v), IV flow rate, days supply.
+1. Convert units if necessary.
+2. Set up a ratio and proportion problem.
+3. Cross multiply.
+4. Divide both sides and cancel out the units.
+5. State the answer.
 
-**Adaptive mode** picks topics using weighted random selection. Topics with
-under 3 attempts get a flat baseline weight (so everything gets explored
-first). After that, weight scales inversely with accuracy.
+Example (Chapter 1, mg per mL dosing):
 
-**Answer checking** uses a tolerance of max(1% of the answer, 0.01) so students
-aren't punished for tiny rounding differences.
+```
+Set up a ratio and proportion problem:
+   40 mg / 1 mL  =  70 mg / X
+Cross multiply:  X × 40 mg  =  1 mL × 70 mg
+Divide both sides by 40 mg and cancel out the milligrams:
+   X  =  (1 mL × 70 mg) / 40 mg
+X = 1.75 mL  answer
+```
 
-**Tracking** lives in `st.session_state` — it resets when the browser refreshes.
-That's intentional for v1 simplicity.
+This matches the pharmacy certification exam format.
 
-## Ideas for v2
+## Chapters
 
-1. **Persistence.** Save stats to a JSON file in `~/.pharmacy_practice.json` so
-   progress survives page refreshes. About 15 lines of code in `tracker.py`.
-2. **More topics.** Alligation, ratio strength, drops per minute, mg/kg dosing,
-   business math (markup, AWP). Each is one new function in `problems.py` plus
-   a line in the `TOPICS` and `GENERATORS` dicts.
-3. **Difficulty levels.** Add an `"easy" | "medium" | "hard"` parameter to each
-   generator that controls the range of input values.
-4. **Duolingo-style features.** Daily goal counter, XP bar, badge for hitting
-   a 10-streak. All doable with session state plus a small JSON persistence
-   layer.
-5. **Explanation depth toggle.** Short solution vs. detailed walkthrough.
-6. **Topic-level review screen.** Show the last 5 missed problems per topic
-   with their solutions.
+| # | Title | Problem types |
+|---|-------|---------------|
+| 1 | Parenteral Doses Using Ratio and Proportion | mg/mL same units · unit conversion · units/mEq |
+| 2 | Powdered Drug Preparations | powder volume · concentration · diluent needed |
+| 3 | Calculations with Percents | grams from % · % from grams · volume for dose |
+| 4 | Using Ratio and Proportion when Preparing Solutions | grams for solution · volume for dose · ratio to % |
+| 5 | Dosage Calculations Based on Body Weight | kg given · lb to kg · find mL |
+| 6 | Dosage Calculations Based on Body Surface Area | dose from BSA · find mL |
+| 7 | Infusion Rates and Drip Rates | mL/hr · gtt/min · time to finish |
+| 8 | Dilutions | new % after dilution · water to add (grams method, not C1V1=C2V2) |
+| 9 | Parenteral Nutrition Calculations | additive volume from mEq · grams in base solution |
+| 10 | Dosage Calculations from Medication Labels | same units · different units |
+
+## Architecture (unchanged from v2)
+
+`Chapter` contains a list of `ProblemType` objects. Each ProblemType has a
+zero-argument generator that returns a problem dict with `question`, `answer`,
+`unit`, `tolerance`, and `steps` (a list of strings shown to the student).
+Stats are nested: `stats[chapter_key][problem_type_key]`, with an `_overall`
+rollup per chapter. The tracker has separate adaptive pickers for cross-chapter
+and within-chapter selection.
+
+The `Chapter` dataclass has reserved fields for `learn_content` and
+`guided_examples`, currently `None`. These hooks are ready for future Learn
+and Guided Examples tabs.
+
+## Reserved for future work
+
+1. **Learn tab.** Per-chapter intro markdown explaining concepts.
+2. **Guided Examples tab.** Worked problems the student clicks through.
+3. **Persistence.** Save stats to a JSON file so progress survives a refresh.
+4. **More problem types.** Add by writing one function per chapter file.
+5. **Daily goal / XP / badges.** All doable on top of the existing stats.
