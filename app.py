@@ -1,25 +1,31 @@
 """
-Pharmacy Tech Math Practice — Streamlit app (v6.4, simplified navigation).
+Pharmacy Tech Math Practice — Streamlit app.
+
+v6.5 design refinement (visual only; no functional changes from v6.4):
+    - Decorative emojis removed from headers, section titles, and button labels
+    - Dashboard hero and Learning Path Preview removed (both were filler)
+    - Mixed-practice access on Dashboard preserved via a secondary button on
+      the Recommended Focus card's has-data state
+    - Streamlit's own success/error styling is trusted; ✅/❌ prefixes dropped
+    - Chapter status dots retained on the sidebar list because they carry data
 
 Layout overview:
     Sidebar    : session metrics, session-goal progress, page nav,
-                 difficulty selector, chapter list.
-    Dashboard  : action-oriented launchpad. Hero CTAs, Recommended Focus +
-                 Missed Problem Review cards, optional queue expander,
-                 Learning Path Preview.
-    Practice   : dual purpose. When a chapter is active, runs the coach-mode
-                 problem flow (answering → first_wrong → revealed). When no
-                 chapter is active, surfaces the diagnostic content that
-                 used to live on the old Progress page: recommended focus,
-                 mastery by chapter, accuracy by chapter, weak-chapter list.
-                 The empty state IS the diagnostic page.
+                 difficulty selector, chapter list (with status dots).
+    Dashboard  : Recommended Focus card, Missed Problem Review card,
+                 optional review-queue expander. Nothing else.
+    Practice   : Dual purpose. With a chapter selected, runs the coach-mode
+                 problem flow (answering → first_wrong → revealed). With no
+                 chapter selected, shows the diagnostic view: quick-start
+                 CTAs, recommended focus, mastery by chapter, accuracy by
+                 chapter, weak-chapter list.
     Calculator : dose-to-volume reference.
 
 Routing note:
-    The internal page state is `st.session_state.current_page`. The sidebar
-    nav radio uses a SEPARATE widget key `nav_choice`. Setting current_page
-    is always safe (not a widget key). The pre-render sync block mirrors
-    current_page → nav_choice before the radio is instantiated.
+    Internal page state is `st.session_state.current_page`. The sidebar nav
+    radio uses a SEPARATE widget key `nav_choice`. Setting current_page is
+    always safe (not a widget key). A pre-render sync block mirrors
+    current_page → nav_choice before the radio is instantiated each run.
 
 Run with:
     streamlit run app.py
@@ -66,9 +72,8 @@ _VALID_PAGES = ["Dashboard", "Practice", "Calculator"]
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Dashboard"
 
-# Migration guard: an existing session that came from v6.3 may have
-# current_page == "Progress". Coerce to Dashboard before the nav radio
-# tries to render that no-longer-valid option.
+# Migration guard: any session carrying a no-longer-valid page value gets
+# coerced to Dashboard before the nav radio tries to render that option.
 if st.session_state.current_page not in _VALID_PAGES:
     st.session_state.current_page = "Dashboard"
 
@@ -214,9 +219,9 @@ def _on_nav_change():
 
 
 with st.sidebar:
-    st.title("💊 Pharmacy Math")
+    st.title("Pharmacy Math")
 
-    st.markdown("**📊 This session**")
+    st.markdown("**This session**")
     row1 = st.columns(2)
     row1[0].metric("Answered", total_attempts())
     acc = current_accuracy()
@@ -227,13 +232,11 @@ with st.sidebar:
 
     goal_count, goal_target = daily_goal_progress()
     goal_pct = min(goal_count / goal_target, 1.0) if goal_target > 0 else 0.0
-    st.markdown(f"**🎯 Session goal:** {min(goal_count, goal_target)} / {goal_target}")
+    st.markdown(f"**Session goal:** {min(goal_count, goal_target)} / {goal_target}")
     st.progress(goal_pct)
 
     st.divider()
 
-    # Nav now sits above Difficulty per v6.4. Progress is no longer an
-    # option; its content lives on the Practice page's empty state.
     st.markdown("**Navigate**")
 
     # Mirror current_page → nav_choice BEFORE the radio is instantiated.
@@ -250,7 +253,7 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("**🎚️ Difficulty**")
+    st.markdown("**Difficulty**")
     st.radio(
         "Difficulty",
         ["Beginner", "Standard", "Challenge"],
@@ -260,7 +263,9 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("**📚 Chapters**")
+    st.markdown("**Chapters**")
+    # Status dot retained: it conveys mastery state at a glance, which is
+    # data, not decoration.
     for chapter in CHAPTERS_LIST:
         emoji, _ = chapter_status(chapter.key)
         label = f"{emoji} Ch. {chapter.number}: {chapter.title}"
@@ -270,17 +275,13 @@ with st.sidebar:
 
 
 # ============================================================
-# Dashboard (action-oriented launchpad)
+# Dashboard
 # ============================================================
 
 def render_dashboard():
-    """Answers 'What should I do next?'
-
-    Section order: hero → action cards → optional queue expander →
-    learning path. No status duplication of the sidebar; mastery and
-    accuracy detail live on the Practice page.
-    """
-    _render_hero()
+    """Two action cards, plus an optional queue expander. No hero, no filler."""
+    st.title("Dashboard")
+    st.caption("Pick up where you left off, or start a mixed-practice session.")
     st.write("")
 
     col_focus, col_review = st.columns(2)
@@ -291,55 +292,18 @@ def render_dashboard():
 
     _render_review_expander()
 
-    st.write("")
-    _render_learning_path()
-
-
-def _render_hero():
-    """Top-of-page hero card. Two primary CTAs side by side."""
-    queue_size = review_queue_size()
-    with st.container(border=True):
-        st.markdown("### Ready for pharmacy math practice?")
-        st.markdown("Adaptive practice finds your weak spots as you go.")
-        st.write("")
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button(
-                "🎯 Start Mixed Practice",
-                key="hero_start_mixed",
-                type="primary",
-                use_container_width=True,
-            ):
-                start_mixed()
-                st.rerun()
-        with b2:
-            review_label = (
-                f"🔁 Review Missed Problems ({queue_size})"
-                if queue_size > 0
-                else "🔁 Review Missed Problems"
-            )
-            if st.button(
-                review_label,
-                key="hero_start_review",
-                type="primary",
-                use_container_width=True,
-                disabled=queue_size == 0,
-            ):
-                practice_from_review(0)
-                st.rerun()
-
 
 def _render_focus_card():
-    """Action card A: Recommended Focus.
+    """Recommended Focus action card.
 
     Three states (has-focus / no-data / all-mastered) share a uniform
-    five-element structure (heading + 3 content rows + button) so the
-    card matches the visual height of _render_review_card across states.
-    Spacer rows via st.write("") pad shorter states up to the same height.
+    five-element structure so the card matches the visual height of
+    _render_review_card. The has-focus state adds a small secondary button
+    for mixed practice so that entry point isn't lost with the hero removed.
     """
     focus_key = recommended_focus_chapter()
     with st.container(border=True):
-        st.markdown("### ⭐  Recommended Focus")
+        st.markdown("### Recommended focus")
         if focus_key:
             ch = get_chapter(focus_key)
             emoji, status_label = chapter_status(focus_key)
@@ -348,19 +312,27 @@ def _render_focus_card():
             st.markdown(f"**Ch. {ch.number} — {ch.title}**")
             st.markdown(f"{emoji} {status_label}  •  Mastery: {mastery}")
             if st.button(
-                "Practice this →",
+                "Practice this chapter",
                 key="focus_card_practice",
                 type="primary",
                 use_container_width=True,
             ):
                 start_chapter(focus_key)
                 st.rerun()
+            if st.button(
+                "Start mixed practice instead",
+                key="focus_card_mixed_secondary",
+                type="secondary",
+                use_container_width=True,
+            ):
+                start_mixed()
+                st.rerun()
         elif total_attempts() == 0:
             st.caption("Complete 5 problems so the app can find your weak topics.")
             st.write("")
             st.write("")
             if st.button(
-                "Start Mixed Practice",
+                "Start mixed practice",
                 key="focus_card_no_data",
                 type="primary",
                 use_container_width=True,
@@ -368,11 +340,11 @@ def _render_focus_card():
                 start_mixed()
                 st.rerun()
         else:
-            st.caption("Nothing weak right now. Mixed practice will surface new gaps as you go.")
+            st.caption("Nothing weak right now. Mixed practice will keep finding new gaps.")
             st.write("")
             st.write("")
             if st.button(
-                "Start Mixed Practice",
+                "Start mixed practice",
                 key="focus_card_all_mastered",
                 type="primary",
                 use_container_width=True,
@@ -382,23 +354,22 @@ def _render_focus_card():
 
 
 def _render_review_card():
-    """Action card B: Missed Problem Review.
+    """Missed Problem Review action card.
 
-    Mirrors _render_focus_card's five-element structure (heading + 3 content
-    rows + button) for height parity. The empty-queue state uses a disabled
-    Start review button rather than going button-less, so the visual weight
-    matches the focus card's empty states.
+    Mirrors _render_focus_card's structure for visual balance. The empty
+    state uses a disabled primary button so the card has the same weight
+    as the focus card.
     """
     queue_size = review_queue_size()
     with st.container(border=True):
-        st.markdown("### 🔁  Missed Problem Review")
+        st.markdown("### Missed problem review")
         if queue_size > 0:
             plural = "problem" if queue_size == 1 else "problems"
-            st.caption("Practice these again to lock the concept in.")
+            st.caption("Practicing these again confirms the concept has stuck.")
             st.markdown(f"**{queue_size} missed {plural}** waiting for another look.")
             st.write("")
             if st.button(
-                "Start review →",
+                "Start review",
                 key="review_card_start",
                 type="primary",
                 use_container_width=True,
@@ -406,11 +377,11 @@ def _render_review_card():
                 practice_from_review(0)
                 st.rerun()
         else:
-            st.caption("Problems you miss on the first try will land here for review.")
+            st.caption("Problems you miss on the first try will appear here for review.")
             st.write("")
             st.write("")
             st.button(
-                "Start review →",
+                "Start review",
                 key="review_card_disabled",
                 type="primary",
                 use_container_width=True,
@@ -419,7 +390,7 @@ def _render_review_card():
 
 
 def _render_review_expander():
-    """Compact per-item queue list. Renders only when queue is non-empty."""
+    """Per-item queue list. Renders only when the queue has entries."""
     queue_size = review_queue_size()
     if queue_size == 0:
         return
@@ -440,7 +411,7 @@ def _render_review_expander():
             with c_btn:
                 st.write("")
                 if st.button(
-                    "Practice →",
+                    "Practice",
                     key=f"review_expander_{i}",
                     use_container_width=True,
                 ):
@@ -450,31 +421,6 @@ def _render_review_expander():
         if st.button("Clear review queue", key="review_expander_clear"):
             clear_review_queue()
             st.rerun()
-
-
-def _render_learning_path():
-    """Three-tier curriculum preview. Informational only — no button.
-
-    Removed the v6.3 'View Full Progress' button since Progress is no longer
-    a page. Diagnostic detail lives on the Practice page now and is reachable
-    via the Practice nav option when no chapter is active.
-    """
-    st.markdown("### 🗺️  Learning Path Preview")
-    st.caption("The curriculum at a glance. Mastery and accuracy detail live on the Practice page.")
-
-    tiers = [
-        ("Foundation",   "Ch. 1–4",  "Build the universal ratio-and-proportion method."),
-        ("Applications", "Ch. 5–7",  "Apply the method to body-based and infusion dosing."),
-        ("Advanced",     "Ch. 8–10", "Specialized dosing techniques that go beyond the standard ratio."),
-    ]
-
-    cols = st.columns(3)
-    for col, (tier_name, ch_range, description) in zip(cols, tiers):
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{tier_name}**")
-                st.caption(ch_range)
-                st.write(description)
 
 
 # ============================================================
@@ -508,7 +454,7 @@ def render_practice_view():
             st.rerun()
     with top_title:
         if st.session_state.mixed_mode:
-            st.markdown("### 🎯  Mixed practice")
+            st.markdown("### Mixed practice")
             st.caption(f"Currently on: Ch. {chapter.number} — {chapter.title}")
         else:
             st.markdown(f"### Ch. {chapter.number}. {chapter.title}")
@@ -517,9 +463,9 @@ def render_practice_view():
     st.write("")
     render_problem_card(chapter, problem)
 
-    # Work-it-out fires only when the FIRST attempt was wrong and the answer
-    # has been revealed (second wrong or Show solution). Late-correct leaves
-    # last_result["correct"]=True, so this won't fire there.
+    # Prerequisite recommendation fires only when the FIRST attempt was
+    # wrong and the answer has been revealed (second wrong or Show solution).
+    # Late-correct leaves last_result["correct"]=True, so this won't fire.
     result = st.session_state.last_result
     if (
         result is not None
@@ -532,23 +478,25 @@ def render_practice_view():
 
 
 def render_practice_empty_state():
-    """Practice page when no chapter is active. Houses the diagnostic content
-    that used to live on the Progress page: recommended-focus callout,
-    mastery by chapter, accuracy by chapter, and the weak-chapters list.
-    A quick-start strip at the top offers Mixed Practice plus (when relevant)
-    Review Missed Problems.
+    """Practice page when no chapter is active. Houses the diagnostic content:
+    recommended-focus callout, mastery by chapter, accuracy by chapter, and
+    the weak-chapters list. A small quick-start strip at the top offers
+    Mixed Practice plus (when relevant) Review Missed Problems.
     """
     st.title("Practice")
-    st.caption("Pick a chapter from the sidebar, or use the quick-start options below.")
+    st.caption(
+        "Pick a chapter from the sidebar to start practicing, or use the quick-start options below. "
+        "Your mastery and accuracy detail is shown further down."
+    )
     st.write("")
 
-    # --- Quick-start CTA strip ---
+    # --- Quick-start ---
     queue_size = review_queue_size()
     if queue_size > 0:
         c1, c2 = st.columns(2)
         with c1:
             if st.button(
-                "🎯 Start Mixed Practice",
+                "Start mixed practice",
                 key="practice_empty_mixed",
                 type="primary",
                 use_container_width=True,
@@ -557,7 +505,7 @@ def render_practice_empty_state():
                 st.rerun()
         with c2:
             if st.button(
-                f"🔁 Review Missed Problems ({queue_size})",
+                f"Review missed problems ({queue_size})",
                 key="practice_empty_review",
                 type="primary",
                 use_container_width=True,
@@ -565,37 +513,30 @@ def render_practice_empty_state():
                 practice_from_review(0)
                 st.rerun()
     else:
-        with st.container(border=True):
-            c_text, c_btn = st.columns([4, 1])
-            with c_text:
-                st.markdown("### 🎯  Mixed practice")
-                st.caption("Adaptive across all ten chapters.")
-            with c_btn:
-                st.write("")
-                if st.button(
-                    "Start",
-                    key="practice_empty_mixed_solo",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    start_mixed()
-                    st.rerun()
+        if st.button(
+            "Start mixed practice",
+            key="practice_empty_mixed_solo",
+            type="primary",
+            use_container_width=True,
+        ):
+            start_mixed()
+            st.rerun()
 
     st.divider()
 
-    # --- Recommended focus callout (moved from old Progress page) ---
+    # --- Recommended focus callout ---
     focus_key = recommended_focus_chapter()
     if focus_key:
         focus_chapter = get_chapter(focus_key)
         focus_emoji, focus_status_label = chapter_status(focus_key)
         focus_mastery = chapter_mastery(focus_key)
         with st.container(border=True):
-            st.markdown("### ⭐  Recommended focus")
+            st.markdown("### Recommended focus")
             st.caption("Your weakest attempted chapter.")
             st.markdown(f"**Ch. {focus_chapter.number} — {focus_chapter.title}**")
             st.markdown(f"{focus_emoji} {focus_status_label}  •  Mastery: {focus_mastery}")
             if st.button(
-                "Practice this →",
+                "Practice this chapter",
                 key="practice_empty_focus_practice",
                 type="primary",
                 use_container_width=True,
@@ -603,7 +544,7 @@ def render_practice_empty_state():
                 start_chapter(focus_key)
                 st.rerun()
 
-    # --- Mastery by chapter (moved from old Progress page) ---
+    # --- Mastery by chapter ---
     st.subheader("Mastery by chapter")
     for chapter in CHAPTERS_LIST:
         mastery = chapter_mastery(chapter.key)
@@ -626,7 +567,7 @@ def render_practice_empty_state():
                 start_chapter(chapter.key)
                 st.rerun()
 
-    # --- Accuracy by chapter (deeper detail, moved from old Progress page) ---
+    # --- Accuracy by chapter ---
     st.subheader("Accuracy by chapter")
     for chapter in CHAPTERS_LIST:
         overall = st.session_state.stats[chapter.key]["_overall"]
@@ -650,7 +591,7 @@ def render_practice_empty_state():
                         f"  • {pt.label}: {s['correct']}/{s['attempts']} ({pt_acc:.0%})"
                     )
 
-    # --- Weak chapters list (moved from old Progress page) ---
+    # --- Weak chapters ---
     weak = get_weak_chapters()
     if weak:
         st.subheader("Chapters to focus on")
@@ -713,7 +654,7 @@ def render_coach_intervention(problem):
     c1, c2, c3 = st.columns(3)
     with c1:
         if st.button(
-            "💡 Get a hint",
+            "Get a hint",
             type="secondary",
             use_container_width=True,
             key="coach_hint",
@@ -722,7 +663,7 @@ def render_coach_intervention(problem):
             st.rerun()
     with c2:
         if st.button(
-            "🔄 Try again",
+            "Try again",
             type="primary",
             use_container_width=True,
             key="coach_retry",
@@ -731,7 +672,7 @@ def render_coach_intervention(problem):
             st.rerun()
     with c3:
         if st.button(
-            "📖 Show solution",
+            "Show solution",
             type="secondary",
             use_container_width=True,
             key="coach_show",
@@ -741,13 +682,17 @@ def render_coach_intervention(problem):
 
 
 def render_revealed_result():
-    """Terminal state: full result + step-by-step + Next problem."""
+    """Terminal state: full result + step-by-step + Next problem.
+
+    Streamlit's st.success and st.error components already supply the
+    green/red visual treatment, so no checkmark/cross prefixes are needed.
+    """
     result = st.session_state.last_result
     attempt_number = result.get("attempt_number", 1)
 
     if result["correct"] and attempt_number == 1:
         st.success(
-            f"✅ Correct! You entered {result['user_answer']} {result['unit']}."
+            f"Correct. You entered {result['user_answer']} {result['unit']}."
         )
     elif result["correct"] and attempt_number > 1:
         # Late-correct. Streak stays broken (already reset on the first wrong).
@@ -764,7 +709,7 @@ def render_revealed_result():
         for step in result["steps"]:
             st.write(f"• {step}")
 
-    if st.button("Next problem →", type="primary", use_container_width=True):
+    if st.button("Next problem", type="primary", use_container_width=True):
         new_problem()
         st.rerun()
 
@@ -801,7 +746,7 @@ def render_helper_buttons(chapter, problem):
     with b1:
         ex_type = "primary" if st.session_state.show_example else "secondary"
         if st.button(
-            "📘 Learn with an example",
+            "Learn with example",
             type=ex_type,
             use_container_width=True,
             key="btn_example",
@@ -814,7 +759,7 @@ def render_helper_buttons(chapter, problem):
     with b2:
         fm_type = "primary" if st.session_state.show_formula else "secondary"
         if st.button(
-            "📐 Show formula",
+            "Show formula",
             type=fm_type,
             use_container_width=True,
             key="btn_formula",
@@ -824,7 +769,7 @@ def render_helper_buttons(chapter, problem):
     with b3:
         hint_type = "primary" if st.session_state.show_hint else "secondary"
         if st.button(
-            "💡 Get a hint",
+            "Get a hint",
             type=hint_type,
             use_container_width=True,
             key="btn_hint",
@@ -846,7 +791,7 @@ def render_helper_content(chapter, problem):
     if st.session_state.show_example and st.session_state.example_problem:
         ex = st.session_state.example_problem
         with st.container(border=True):
-            st.markdown("**📘 Worked example (same problem type)**")
+            st.markdown("**Worked example (same problem type)**")
             st.markdown(f"_Question:_ {ex['question']}")
             st.markdown("_Solution:_")
             for step in ex["steps"]:
@@ -858,7 +803,7 @@ def render_work_it_out(chapter):
     """Recommend the prerequisite chapter after a wrong answer."""
     prereq = get_chapter(chapter.prerequisite_chapter)
     with st.container(border=True):
-        st.markdown("#### 🔧 Work it out")
+        st.markdown("#### Practice the foundation first")
         st.markdown(
             f"This topic builds on a more foundational skill: "
             f"**Ch. {prereq.number} — {prereq.title}**."
@@ -867,7 +812,7 @@ def render_work_it_out(chapter):
             "Practicing the foundational chapter for a few problems often makes this one click."
         )
         if st.button(
-            f"Practice Ch. {prereq.number} first →",
+            f"Practice Ch. {prereq.number} first",
             key="prereq_jump",
             use_container_width=True,
         ):
