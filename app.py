@@ -13,6 +13,16 @@ Layout overview:
     Calculator : dose-to-volume reference.
     Progress   : per-chapter accuracy breakdown.
 
+Routing note:
+    The internal page state is `st.session_state.current_page`. The sidebar
+    nav radio uses a SEPARATE widget key `nav_choice`. This split is
+    deliberate: Streamlit raises StreamlitAPIException if you mutate a
+    widget's session_state key after the widget has been instantiated on
+    the current run. The chapter buttons in the sidebar render AFTER the
+    nav radio, so they cannot touch `nav_choice` directly. They update
+    `current_page` (which is not a widget key) and a pre-render sync block
+    mirrors it into `nav_choice` on the next rerun.
+
 Run with:
     streamlit run app.py
 """
@@ -48,6 +58,13 @@ st.set_page_config(
     layout="wide",
 )
 init_tracker()
+
+# Internal routing key. Kept separate from any widget key so it can be
+# updated safely from anywhere in the script (including after widgets
+# have rendered). tracker.init_tracker() still initializes an unused
+# `page` key from v6.0; harmless and can be removed in a follow-up.
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Dashboard"
 
 
 # ============================================================
@@ -90,7 +107,7 @@ def go_to_dashboard():
     st.session_state.current_problem = None
     st.session_state.last_result = None
     st.session_state.problem_type_choice = "_adaptive"
-    st.session_state.page = "Dashboard"
+    st.session_state.current_page = "Dashboard"
     reset_helpers()
 
 
@@ -99,7 +116,7 @@ def start_chapter(chapter_key, problem_type_key="_adaptive"):
     st.session_state.selected_chapter_key = chapter_key
     st.session_state.mixed_mode = False
     st.session_state.problem_type_choice = problem_type_key
-    st.session_state.page = "Practice"
+    st.session_state.current_page = "Practice"
     new_problem()
 
 
@@ -108,7 +125,7 @@ def start_mixed():
     st.session_state.mixed_mode = True
     st.session_state.selected_chapter_key = None
     st.session_state.problem_type_choice = "_adaptive"
-    st.session_state.page = "Practice"
+    st.session_state.current_page = "Practice"
     new_problem()
 
 
@@ -193,6 +210,15 @@ def coach_reveal():
 # Sidebar (metrics, today's goal, difficulty, nav, chapter list)
 # ============================================================
 
+def _on_nav_change():
+    """Sync current_page when the user clicks the navigation radio.
+
+    Runs DURING widget processing (before the script reruns), so we can
+    safely write to current_page here. Triggered by the radio's on_change.
+    """
+    st.session_state.current_page = st.session_state.nav_choice
+
+
 with st.sidebar:
     st.title("💊 Pharmacy Math")
 
@@ -223,10 +249,20 @@ with st.sidebar:
     st.divider()
 
     st.markdown("**Navigate**")
+
+    # Mirror current_page → nav_choice BEFORE the radio is instantiated.
+    # Handles the chapter-button case: that handler updates current_page,
+    # this block resyncs the radio's display on the next rerun. Safe to
+    # write to a widget's key here because the widget does not exist yet
+    # on this run.
+    if st.session_state.get("nav_choice") != st.session_state.current_page:
+        st.session_state.nav_choice = st.session_state.current_page
+
     st.radio(
         "Page",
         ["Dashboard", "Practice", "Calculator", "Progress"],
-        key="page",
+        key="nav_choice",
+        on_change=_on_nav_change,
         label_visibility="collapsed",
     )
 
@@ -237,6 +273,8 @@ with st.sidebar:
         emoji, _ = chapter_status(chapter.key)
         label = f"{emoji} Ch. {chapter.number}: {chapter.title}"
         if st.button(label, key=f"sidebar_ch_{chapter.key}", use_container_width=True):
+            # start_chapter writes current_page (not nav_choice) — safe even
+            # though the nav radio has already been instantiated this run.
             start_chapter(chapter.key)
             st.rerun()
 
@@ -671,7 +709,7 @@ def render_work_it_out(chapter):
 # Page routing
 # ============================================================
 
-page = st.session_state.page
+page = st.session_state.current_page
 
 if page == "Dashboard":
     render_dashboard()
