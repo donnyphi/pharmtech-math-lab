@@ -65,17 +65,45 @@ def init_tracker():
     if "difficulty" not in st.session_state:
         st.session_state.difficulty = "Standard"
 
+    # Page routing. "Dashboard" is the landing view.
+    if "page" not in st.session_state:
+        st.session_state.page = "Dashboard"
+
+    # Coach-mode state (per-problem; reset by reset_helpers).
+    #   "answering"   = input visible, no Check submitted yet (or user clicked Try again)
+    #   "first_wrong" = one wrong submission; coach intervention buttons shown
+    #   "revealed"    = full solution visible; either correct, late-correct, or gave up
+    if "problem_phase" not in st.session_state:
+        st.session_state.problem_phase = "answering"
+    if "attempt_count" not in st.session_state:
+        # Counts Check submissions on the current problem. Only the first
+        # submission feeds record_attempt; retries are pure learning.
+        st.session_state.attempt_count = 0
+
+    # Session-wide review queue. Holds metadata for problems missed on the
+    # first attempt so the student can practice the same problem type again.
+    if "review_queue" not in st.session_state:
+        st.session_state.review_queue = []
+
+    # Today's-goal target (count of problems). Resets when the browser
+    # session ends, since there is no persistence layer.
+    if "daily_goal_target" not in st.session_state:
+        st.session_state.daily_goal_target = 5
+
 
 def reset_helpers():
-    """Clear the three helper toggles and the cached example problem.
+    """Clear the helper toggles, cached example, and per-problem coach state.
 
     Call this whenever a new problem is generated so the formula/hint/example
-    panels close and the worked example regenerates fresh next time.
+    panels close, the worked example regenerates fresh, and the coach state
+    machine resets to "answering" with a zeroed attempt count.
     """
     st.session_state.show_formula = False
     st.session_state.show_hint = False
     st.session_state.show_example = False
     st.session_state.example_problem = None
+    st.session_state.problem_phase = "answering"
+    st.session_state.attempt_count = 0
 
 
 def record_attempt(chapter_key, problem_type_key, is_correct):
@@ -243,3 +271,63 @@ def recommend_weak_topic():
     from chapters import CHAPTERS
     chapter = CHAPTERS[key]
     return f"Ch. {chapter.number} — {chapter.title}"
+
+
+# ============================================================
+# Review queue (session-wide, FIFO-capped)
+# ============================================================
+
+REVIEW_QUEUE_MAX = 20
+
+
+def push_review_queue(chapter_key, problem_type_key, question):
+    """Add a missed problem's metadata to the review queue.
+
+    Stores only what's needed to regenerate a fresh problem of the same type:
+    the chapter key, problem-type key, and a short question preview for the
+    queue display. FIFO eviction once the queue exceeds REVIEW_QUEUE_MAX.
+    """
+    preview = question if len(question) <= 140 else question[:137] + "..."
+    entry = {
+        "chapter_key": chapter_key,
+        "problem_type_key": problem_type_key,
+        "question_preview": preview,
+    }
+    queue = st.session_state.review_queue
+    queue.append(entry)
+    if len(queue) > REVIEW_QUEUE_MAX:
+        # Drop oldest entries to stay within the cap.
+        st.session_state.review_queue = queue[-REVIEW_QUEUE_MAX:]
+
+
+def pop_review_queue_at(index):
+    """Remove and return the entry at the given index. None if out of range."""
+    queue = st.session_state.review_queue
+    if 0 <= index < len(queue):
+        return queue.pop(index)
+    return None
+
+
+def clear_review_queue():
+    """Empty the review queue."""
+    st.session_state.review_queue = []
+
+
+def review_queue_size():
+    return len(st.session_state.review_queue)
+
+
+# ============================================================
+# Today's-goal progress (session-only)
+# ============================================================
+
+def daily_goal_progress():
+    """Return (count, target) for the Today's-goal display.
+
+    Count is total attempts this session (sum of every chapter's _overall
+    attempts), capped at the target so the progress bar never exceeds 1.0.
+    "Today" is approximate here since session state resets per browser session.
+    """
+    count = total_attempts()
+    target = st.session_state.daily_goal_target
+    return count, target
