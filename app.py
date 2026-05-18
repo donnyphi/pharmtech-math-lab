@@ -1,25 +1,19 @@
 """
-Pharmacy Tech Math Practice — Streamlit app (v6.4, simplified navigation).
+Pharmacy Tech Math Practice — Streamlit app (v6.5, polished dashboard).
 
 Layout overview:
     Sidebar    : session metrics, session-goal progress, page nav,
-                 difficulty selector, chapter list.
-    Dashboard  : action-oriented launchpad. Hero CTAs, Recommended Focus +
-                 Missed Problem Review cards, optional queue expander,
-                 Learning Path Preview.
+                 difficulty selector, chapter list. UNCHANGED from v6.4.
+    Dashboard  : redesigned as a learning-platform landing page. Top
+                 announcement strip → hero with title/subtitle/CTAs →
+                 three-column "How it works" feature highlights →
+                 Personalized action cards (focus + review) with optional
+                 queue expander → Learning Path Preview with topic hints.
     Practice   : dual purpose. When a chapter is active, runs the coach-mode
-                 problem flow (answering → first_wrong → revealed). When no
-                 chapter is active, surfaces the diagnostic content that
-                 used to live on the old Progress page: recommended focus,
-                 mastery by chapter, accuracy by chapter, weak-chapter list.
-                 The empty state IS the diagnostic page.
-    Calculator : dose-to-volume reference.
-
-Routing note:
-    The internal page state is `st.session_state.current_page`. The sidebar
-    nav radio uses a SEPARATE widget key `nav_choice`. Setting current_page
-    is always safe (not a widget key). The pre-render sync block mirrors
-    current_page → nav_choice before the radio is instantiated.
+                 problem flow. When no chapter is active, surfaces the
+                 diagnostic content (recommended focus, mastery by chapter,
+                 accuracy by chapter, weak-chapter list). UNCHANGED from v6.4.
+    Calculator : dose-to-volume reference. UNCHANGED.
 
 Run with:
     streamlit run app.py
@@ -146,14 +140,7 @@ def check_answer(problem, user_answer):
     """Verify the answer and drive the coach state machine.
 
     Stats math preserved: record_attempt fires only on the FIRST submission,
-    so retries and self-corrections don't affect mastery or streak. The
-    first wrong submission also adds the problem to the review queue.
-
-    Phase transitions:
-        answering   + correct  →  revealed
-        answering   + wrong    →  first_wrong   (record_attempt + push to queue)
-        first_wrong + correct  →  revealed      (late-correct, no stats update)
-        first_wrong + wrong    →  revealed      (full solution forced)
+    so retries and self-corrections don't affect mastery or streak.
     """
     correct_value = problem["answer"]
     base_tolerance = max(abs(correct_value) * 0.01, problem["tolerance"])
@@ -177,7 +164,6 @@ def check_answer(problem, user_answer):
     elif is_first_submission:
         st.session_state.problem_phase = "first_wrong"
     else:
-        # Second wrong submission → reveal the full solution.
         st.session_state.problem_phase = "revealed"
 
     st.session_state.last_result = {
@@ -205,7 +191,7 @@ def coach_reveal():
 
 
 # ============================================================
-# Sidebar (metrics, session goal, nav, difficulty, chapter list)
+# Sidebar (UNCHANGED from v6.4)
 # ============================================================
 
 def _on_nav_change():
@@ -232,14 +218,9 @@ with st.sidebar:
 
     st.divider()
 
-    # Nav now sits above Difficulty per v6.4. Progress is no longer an
-    # option; its content lives on the Practice page's empty state.
     st.markdown("**Navigate**")
-
-    # Mirror current_page → nav_choice BEFORE the radio is instantiated.
     if st.session_state.get("nav_choice") != st.session_state.current_page:
         st.session_state.nav_choice = st.session_state.current_page
-
     st.radio(
         "Page",
         _VALID_PAGES,
@@ -270,37 +251,82 @@ with st.sidebar:
 
 
 # ============================================================
-# Dashboard (action-oriented launchpad)
+# Dashboard (REDESIGNED for v6.5 — landing-page feel)
 # ============================================================
 
-def render_dashboard():
-    """Answers 'What should I do next?'
+def _section_label(text):
+    """Small uppercase section label. Used above each Dashboard section
+    that contains multiple cards, to anchor the eye and create rhythm
+    without taking much vertical space."""
+    st.markdown(
+        f'<p style="opacity:0.55; font-size:0.8rem; '
+        f'text-transform:uppercase; letter-spacing:0.06em; '
+        f'margin: 0 0 0.6rem; font-weight:600;">{text}</p>',
+        unsafe_allow_html=True,
+    )
 
-    Section order: hero → action cards → optional queue expander →
-    learning path. No status duplication of the sidebar; mastery and
-    accuracy detail live on the Practice page.
+
+def render_dashboard():
+    """Action-oriented learning-platform landing page.
+
+    Section order: announcement → hero → feature highlights → action cards
+    (+ optional queue expander) → learning path. Status metrics and mastery
+    detail live elsewhere (sidebar and Practice page respectively) to keep
+    this page focused on decisions and motivation rather than measurement.
     """
+    _render_announcement_strip()
     _render_hero()
     st.write("")
-
-    col_focus, col_review = st.columns(2)
-    with col_focus:
-        _render_focus_card()
-    with col_review:
-        _render_review_card()
-
+    _render_feature_highlights()
+    st.write("")
+    _render_action_cards()
     _render_review_expander()
-
     st.write("")
     _render_learning_path()
 
 
+def _render_announcement_strip():
+    """Thin notification banner at the top of the dashboard. Context-aware:
+    flips to a review-focused message when the user has missed problems
+    queued, otherwise highlights the coach-mode feature.
+    """
+    if review_queue_size() > 0:
+        message = "<strong>New:</strong> Missed problems are saved for review."
+    else:
+        message = "<strong>New:</strong> Coach Mode now gives hints before showing solutions."
+
+    st.markdown(
+        f'<div style="background-color: rgba(28, 131, 225, 0.08); '
+        f'padding: 0.55rem 1rem; border-radius: 6px; '
+        f'border-left: 3px solid #1c83e1; margin-bottom: 1.25rem; '
+        f'font-size: 0.92rem;">'
+        f'🆕 &nbsp;{message}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_hero():
-    """Top-of-page hero card. Two primary CTAs side by side."""
+    """Landing-page hero: large title, descriptive subtitle, two primary CTAs.
+
+    Title and subtitle render via inline HTML inside a bordered container
+    so the entire hero reads as one block. The CTAs are native Streamlit
+    buttons in a column row directly below the title block.
+    """
     queue_size = review_queue_size()
     with st.container(border=True):
-        st.markdown("### Ready for pharmacy math practice?")
-        st.markdown("Adaptive practice finds your weak spots as you go.")
+        st.markdown(
+            '<div style="padding: 1rem 0.25rem 0.5rem;">'
+            '<h1 style="margin:0; font-size:2.1rem; line-height:1.2; font-weight:700;">'
+            'Pharmacy math, practiced with purpose.'
+            '</h1>'
+            '<p style="margin:1rem 0 0; font-size:1.05rem; line-height:1.55; opacity:0.78;">'
+            'Build accuracy in dosage calculations, reconstitution, dilutions, IV rates, '
+            'and more — with hints, review queues, and mastery tracking.'
+            '</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         st.write("")
         b1, b2 = st.columns(2)
         with b1:
@@ -329,13 +355,60 @@ def _render_hero():
                 st.rerun()
 
 
+def _render_feature_highlights():
+    """Three-column 'How it works' section. Each card centers a large icon
+    above a bold title and a one-paragraph description. No buttons — these
+    are explanatory cards, not CTAs.
+    """
+    _section_label("How it works")
+
+    features = [
+        ("🔁", "Unlimited Practice",
+         "Randomized pharmacy math problems let you keep practicing until "
+         "the setup feels automatic."),
+        ("💡", "Hints Before Answers",
+         "Wrong answers trigger hints and retry chances before the full "
+         "solution is revealed."),
+        ("🎯", "Adaptive Review",
+         "Missed problems are saved into a review queue so you know exactly "
+         "what to practice next."),
+    ]
+
+    cols = st.columns(3, gap="medium")
+    for col, (icon, title, body) in zip(cols, features):
+        with col:
+            with st.container(border=True):
+                st.markdown(
+                    f'<div style="text-align:center; padding:0.75rem 0.5rem;">'
+                    f'<div style="font-size:2.4rem; line-height:1; margin-bottom:0.6rem;">{icon}</div>'
+                    f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.45rem;">{title}</div>'
+                    f'<div style="opacity:0.75; font-size:0.92rem; line-height:1.55;">{body}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+
+def _render_action_cards():
+    """Side-by-side Recommended Focus and Missed Problem Review.
+
+    The cards themselves (and their height-parity structure) are unchanged
+    from v6.4. The wrapping section label positions them visually as
+    'personalized actions' beneath the explanatory feature highlights above.
+    """
+    _section_label("Personalized for you")
+    col_focus, col_review = st.columns(2, gap="medium")
+    with col_focus:
+        _render_focus_card()
+    with col_review:
+        _render_review_card()
+
+
 def _render_focus_card():
     """Action card A: Recommended Focus.
 
     Three states (has-focus / no-data / all-mastered) share a uniform
     five-element structure (heading + 3 content rows + button) so the
     card matches the visual height of _render_review_card across states.
-    Spacer rows via st.write("") pad shorter states up to the same height.
     """
     focus_key = recommended_focus_chapter()
     with st.container(border=True):
@@ -384,10 +457,9 @@ def _render_focus_card():
 def _render_review_card():
     """Action card B: Missed Problem Review.
 
-    Mirrors _render_focus_card's five-element structure (heading + 3 content
-    rows + button) for height parity. The empty-queue state uses a disabled
-    Start review button rather than going button-less, so the visual weight
-    matches the focus card's empty states.
+    Mirrors _render_focus_card's five-element structure for height parity.
+    The empty-queue state uses a disabled Start review button rather than
+    going button-less, so the visual weight matches the focus card.
     """
     queue_size = review_queue_size()
     with st.container(border=True):
@@ -453,32 +525,43 @@ def _render_review_expander():
 
 
 def _render_learning_path():
-    """Three-tier curriculum preview. Informational only — no button.
-
-    Removed the v6.3 'View Full Progress' button since Progress is no longer
-    a page. Diagnostic detail lives on the Practice page now and is reachable
-    via the Practice nav option when no chapter is active.
+    """Three-tier curriculum preview with chapter topic hints below each
+    tier's description. Informational only — no buttons. Topic lines use
+    middle-dot separators to keep the rhythm visual rather than rhetorical.
     """
-    st.markdown("### 🗺️  Learning Path Preview")
-    st.caption("The curriculum at a glance. Mastery and accuracy detail live on the Practice page.")
+    _section_label("The full curriculum")
 
     tiers = [
-        ("Foundation",   "Ch. 1–4",  "Build the universal ratio-and-proportion method."),
-        ("Applications", "Ch. 5–7",  "Apply the method to body-based and infusion dosing."),
-        ("Advanced",     "Ch. 8–10", "Specialized dosing techniques that go beyond the standard ratio."),
+        ("Foundation", "Ch. 1–4",
+         "Build the universal ratio-and-proportion method.",
+         "Parenteral doses · Powdered drugs · Percents · Solutions"),
+        ("Applications", "Ch. 5–7",
+         "Apply the method to body-based and infusion dosing.",
+         "Body weight · BSA · Infusion rates"),
+        ("Advanced", "Ch. 8–10",
+         "Specialized dosing techniques beyond the standard ratio.",
+         "Dilutions · Parenteral nutrition · Medication labels"),
     ]
 
-    cols = st.columns(3)
-    for col, (tier_name, ch_range, description) in zip(cols, tiers):
+    cols = st.columns(3, gap="medium")
+    for col, (tier_name, ch_range, description, topics) in zip(cols, tiers):
         with col:
             with st.container(border=True):
-                st.markdown(f"**{tier_name}**")
-                st.caption(ch_range)
-                st.write(description)
+                st.markdown(
+                    f'<div style="padding:0.5rem 0.25rem;">'
+                    f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.2rem;">{tier_name}</div>'
+                    f'<div style="opacity:0.55; font-size:0.78rem; '
+                    f'text-transform:uppercase; letter-spacing:0.06em; '
+                    f'margin-bottom:0.75rem;">{ch_range}</div>'
+                    f'<div style="font-size:0.95rem; opacity:0.85; margin-bottom:0.6rem; line-height:1.5;">{description}</div>'
+                    f'<div style="font-size:0.85rem; opacity:0.7; line-height:1.6;">{topics}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
 
 # ============================================================
-# Practice (coach-mode problem view + diagnostic empty state)
+# Practice (UNCHANGED from v6.4)
 # ============================================================
 
 def render_practice_view():
@@ -517,9 +600,6 @@ def render_practice_view():
     st.write("")
     render_problem_card(chapter, problem)
 
-    # Work-it-out fires only when the FIRST attempt was wrong and the answer
-    # has been revealed (second wrong or Show solution). Late-correct leaves
-    # last_result["correct"]=True, so this won't fire there.
     result = st.session_state.last_result
     if (
         result is not None
@@ -533,16 +613,12 @@ def render_practice_view():
 
 def render_practice_empty_state():
     """Practice page when no chapter is active. Houses the diagnostic content
-    that used to live on the Progress page: recommended-focus callout,
-    mastery by chapter, accuracy by chapter, and the weak-chapters list.
-    A quick-start strip at the top offers Mixed Practice plus (when relevant)
-    Review Missed Problems.
+    that used to live on the Progress page.
     """
     st.title("Practice")
     st.caption("Pick a chapter from the sidebar, or use the quick-start options below.")
     st.write("")
 
-    # --- Quick-start CTA strip ---
     queue_size = review_queue_size()
     if queue_size > 0:
         c1, c2 = st.columns(2)
@@ -583,7 +659,6 @@ def render_practice_empty_state():
 
     st.divider()
 
-    # --- Recommended focus callout (moved from old Progress page) ---
     focus_key = recommended_focus_chapter()
     if focus_key:
         focus_chapter = get_chapter(focus_key)
@@ -603,7 +678,6 @@ def render_practice_empty_state():
                 start_chapter(focus_key)
                 st.rerun()
 
-    # --- Mastery by chapter (moved from old Progress page) ---
     st.subheader("Mastery by chapter")
     for chapter in CHAPTERS_LIST:
         mastery = chapter_mastery(chapter.key)
@@ -626,7 +700,6 @@ def render_practice_empty_state():
                 start_chapter(chapter.key)
                 st.rerun()
 
-    # --- Accuracy by chapter (deeper detail, moved from old Progress page) ---
     st.subheader("Accuracy by chapter")
     for chapter in CHAPTERS_LIST:
         overall = st.session_state.stats[chapter.key]["_overall"]
@@ -650,7 +723,6 @@ def render_practice_empty_state():
                         f"  • {pt.label}: {s['correct']}/{s['attempts']} ({pt_acc:.0%})"
                     )
 
-    # --- Weak chapters list (moved from old Progress page) ---
     weak = get_weak_chapters()
     if weak:
         st.subheader("Chapters to focus on")
@@ -750,7 +822,6 @@ def render_revealed_result():
             f"✅ Correct! You entered {result['user_answer']} {result['unit']}."
         )
     elif result["correct"] and attempt_number > 1:
-        # Late-correct. Streak stays broken (already reset on the first wrong).
         st.info(
             "Nice correction — you got it on retry. This won't count toward your streak, "
             "but it helps your review progress."
