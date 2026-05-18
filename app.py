@@ -233,7 +233,7 @@ with st.sidebar:
 
     goal_count, goal_target = daily_goal_progress()
     goal_pct = min(goal_count / goal_target, 1.0) if goal_target > 0 else 0.0
-    st.markdown(f"**🎯 Today's goal:** {min(goal_count, goal_target)} / {goal_target}")
+    st.markdown(f"**🎯 Session goal:** {min(goal_count, goal_target)} / {goal_target}")
     st.progress(goal_pct)
 
     st.divider()
@@ -284,115 +284,154 @@ with st.sidebar:
 # ============================================================
 
 def render_dashboard():
-    st.title("Dashboard")
-    st.caption("Pick up where you left off, or jump into mixed practice.")
+    """Action-oriented launchpad. Answers: 'What should I do next?'
+
+    Status detail (mastery bars, accuracy breakdown, weak chapters) lives on
+    the Progress page. Glanceable session metrics (answered, accuracy,
+    streak, best, session goal) live in the sidebar. This page is for
+    decisions, not measurement.
+    """
+    _render_hero()
     st.write("")
 
-    # Quick-start row
-    focus_key = recommended_focus_chapter()
-    if focus_key:
-        focus_chapter = get_chapter(focus_key)
-        focus_emoji, focus_status_label = chapter_status(focus_key)
-        focus_mastery = chapter_mastery(focus_key)
+    col_focus, col_review = st.columns(2)
+    with col_focus:
+        _render_focus_card()
+    with col_review:
+        _render_review_card()
 
-        col_focus, col_mixed = st.columns(2)
-        with col_focus:
-            with st.container(border=True):
-                st.markdown("### ⭐  Recommended focus")
-                st.caption("Your weakest attempted chapter. Practice here to level up.")
-                st.markdown(f"**Ch. {focus_chapter.number} — {focus_chapter.title}**")
-                st.markdown(f"{focus_emoji} {focus_status_label}  •  Mastery: {focus_mastery}")
-                if st.button(
-                    "Practice this →",
-                    key="dash_start_focus",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    start_chapter(focus_key)
-                    st.rerun()
-        with col_mixed:
-            with st.container(border=True):
-                st.markdown("### 🎯  Mixed practice")
-                st.caption("Adaptive across all chapters. Drills your weakest topics first.")
-                st.write("")
-                st.write("")
-                if st.button(
-                    "Start mixed",
-                    key="dash_start_mixed",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    start_mixed()
-                    st.rerun()
-    else:
-        with st.container(border=True):
-            c_text, c_btn = st.columns([4, 1])
-            with c_text:
-                st.markdown("### 🎯  Mixed practice")
-                st.caption("Adaptive across all chapters. Focuses on your weakest topics first.")
-            with c_btn:
-                st.write("")
-                if st.button(
-                    "Start",
-                    key="dash_start_mixed_solo",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    start_mixed()
-                    st.rerun()
+    # Compact expander preserves access to the per-item queue without
+    # cluttering the action cards above.
+    _render_review_expander()
 
     st.write("")
-
-    # Session stats row
-    st.markdown("### 📊  Session stats")
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Answered", total_attempts())
-    accuracy_now = current_accuracy()
-    s2.metric("Accuracy", f"{accuracy_now:.0%}" if accuracy_now is not None else "—")
-    s3.metric("Streak", st.session_state.streak)
-    s4.metric("Best streak", st.session_state.best_streak)
-
-    # Today's goal
-    goal_count, goal_target = daily_goal_progress()
-    goal_display = min(goal_count, goal_target)
-    st.markdown(f"**🎯 Today's goal:** {goal_display} / {goal_target} problems")
-    st.progress(min(goal_count / goal_target, 1.0) if goal_target > 0 else 0.0)
-    if goal_count == 0:
-        st.caption("Resets when the browser session ends.")
+    _render_session_practice_plan()
 
     st.write("")
+    _render_learning_path()
 
-    # Mastery bars
-    st.markdown("### 📈  Mastery by chapter")
-    for chapter in CHAPTERS_LIST:
-        mastery = chapter_mastery(chapter.key)
-        emoji, status_label = chapter_status(chapter.key)
-        attempts = st.session_state.stats[chapter.key]["_overall"]["attempts"]
 
-        c_label, c_bar, c_btn = st.columns([4, 4, 1])
-        with c_label:
-            st.markdown(f"{emoji} **Ch. {chapter.number}.** {chapter.title}")
-            if attempts == 0:
-                st.caption(status_label)
-            else:
-                st.caption(f"{status_label}  •  Mastery: {mastery}  •  {attempts} attempts")
-        with c_bar:
-            st.write("")
-            st.progress(mastery / 100)
-        with c_btn:
-            st.write("")
-            if st.button("Practice", key=f"dash_practice_{chapter.key}", use_container_width=True):
-                start_chapter(chapter.key)
+def _render_hero():
+    """Top-of-page hero card. Two primary CTAs side by side."""
+    queue_size = review_queue_size()
+    with st.container(border=True):
+        st.markdown("### Ready for pharmacy math practice?")
+        st.markdown("Adaptive practice finds your weak spots as you go.")
+        st.write("")
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button(
+                "🎯 Start Mixed Practice",
+                key="hero_start_mixed",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_mixed()
+                st.rerun()
+        with b2:
+            review_label = (
+                f"🔁 Review Missed Problems ({queue_size})"
+                if queue_size > 0
+                else "🔁 Review Missed Problems"
+            )
+            # Disabled when queue is empty so the button is visible but inert.
+            if st.button(
+                review_label,
+                key="hero_start_review",
+                type="primary",
+                use_container_width=True,
+                disabled=queue_size == 0,
+            ):
+                practice_from_review(0)
                 st.rerun()
 
-    st.write("")
 
-    # Review queue
+def _render_focus_card():
+    """Action card A: recommended focus, with no-data fallback to mixed."""
+    focus_key = recommended_focus_chapter()
+    with st.container(border=True):
+        st.markdown("### ⭐  Recommended Focus")
+
+        if focus_key:
+            ch = get_chapter(focus_key)
+            emoji, status_label = chapter_status(focus_key)
+            mastery = chapter_mastery(focus_key)
+            st.caption("Your weakest attempted chapter. Practicing here moves the needle fastest.")
+            st.markdown(f"**Ch. {ch.number} — {ch.title}**")
+            st.markdown(f"{emoji} {status_label}  •  Mastery: {mastery}")
+            if st.button(
+                "Practice this →",
+                key="focus_card_practice",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_chapter(focus_key)
+                st.rerun()
+        elif total_attempts() == 0:
+            # First-run state.
+            st.caption(
+                "Complete 5 problems so the app can find your weak topics."
+            )
+            st.write("")
+            if st.button(
+                "Start Mixed Practice",
+                key="focus_card_no_data",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_mixed()
+                st.rerun()
+        else:
+            # Every attempted chapter is at or above the Mastered threshold.
+            st.caption(
+                "Nothing weak right now. Mixed practice will surface new gaps as you go."
+            )
+            st.write("")
+            if st.button(
+                "Start Mixed Practice",
+                key="focus_card_all_mastered",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_mixed()
+                st.rerun()
+
+
+def _render_review_card():
+    """Action card B: count + CTA only. Per-item list is in the expander below."""
     queue_size = review_queue_size()
-    st.markdown(f"### 🔁  Review queue  ({queue_size})")
+    with st.container(border=True):
+        st.markdown("### 🔁  Missed Problem Review")
+        if queue_size > 0:
+            plural = "problem" if queue_size == 1 else "problems"
+            st.markdown(f"**{queue_size} missed {plural}** waiting for another look.")
+            st.caption("Practicing the same problem type again is how the concept locks in.")
+            if st.button(
+                "Start review →",
+                key="review_card_start",
+                type="primary",
+                use_container_width=True,
+            ):
+                practice_from_review(0)
+                st.rerun()
+        else:
+            st.caption(
+                "Problems you miss on the first try will land here. "
+                "You'll come back to a fresh problem of the same type so you can prove you've got it."
+            )
+
+
+def _render_review_expander():
+    """Optional drill-down: per-item queue list with individual Practice buttons.
+
+    Only renders when the queue has at least one entry. Collapsed by default
+    so the dashboard stays clean.
+    """
+    queue_size = review_queue_size()
     if queue_size == 0:
-        st.caption("Problems you miss on the first try will land here so you can revisit the topic.")
-    else:
+        return
+
+    with st.expander(f"View all missed problems ({queue_size})"):
         st.caption(
             "Each entry generates a fresh problem of the same type. "
             "The original is removed from the queue once you start."
@@ -408,16 +447,69 @@ def render_dashboard():
             with c_btn:
                 st.write("")
                 if st.button(
-                    "Practice this →",
-                    key=f"review_start_{i}",
+                    "Practice →",
+                    key=f"review_expander_{i}",
                     use_container_width=True,
                 ):
                     practice_from_review(i)
                     st.rerun()
         st.write("")
-        if st.button("Clear review queue", key="review_clear"):
+        if st.button("Clear review queue", key="review_expander_clear"):
             clear_review_queue()
             st.rerun()
+
+
+def _render_session_practice_plan():
+    """Full-width three-step plan. Start Plan kicks off mixed practice."""
+    with st.container(border=True):
+        st.markdown("### 📋  Session Practice Plan")
+        st.caption("A simple three-step session that builds depth across mixed, focus, and review.")
+        st.write("")
+        st.markdown("**Step 1.** Warm up with mixed practice.")
+        st.markdown("**Step 2.** Practice your recommended focus chapter.")
+        st.markdown("**Step 3.** Review missed problems.")
+        st.write("")
+        if st.button(
+            "Start Plan →",
+            key="plan_start",
+            type="primary",
+            use_container_width=True,
+        ):
+            start_mixed()
+            st.rerun()
+
+
+def _render_learning_path():
+    """Three-tier curriculum preview. View Full Progress routes to Progress."""
+    st.markdown("### 🗺️  Learning Path Preview")
+    st.caption("The curriculum at a glance. Chapter detail and mastery live on the Progress page.")
+
+    tiers = [
+        ("Foundation",   "Ch. 1–4",  "Build the universal ratio-and-proportion method."),
+        ("Applications", "Ch. 5–7",  "Apply the method to body-based and infusion dosing."),
+        ("Advanced",     "Ch. 8–10", "Specialized dosing techniques that go beyond the standard ratio."),
+    ]
+
+    cols = st.columns(3)
+    for col, (tier_name, ch_range, description) in zip(cols, tiers):
+        with col:
+            with st.container(border=True):
+                st.markdown(f"**{tier_name}**")
+                st.caption(ch_range)
+                st.write(description)
+
+    st.write("")
+    if st.button(
+        "View Full Progress →",
+        key="learning_path_view_progress",
+        use_container_width=True,
+    ):
+        # current_page is not a widget key, so this is safe even though the
+        # nav radio has already rendered this run. The pre-render sync block
+        # will resync nav_choice on the next rerun.
+        st.session_state.current_page = "Progress"
+        st.rerun()
+
 
 
 # ============================================================
@@ -732,11 +824,59 @@ elif page == "Calculator":
 
 elif page == "Progress":
     st.title("Your progress")
+    st.caption("Diagnostic detail. Use the Dashboard to decide what to practice next.")
 
     cols = st.columns(2)
     cols[0].metric("Current streak", st.session_state.streak)
     cols[1].metric("Best streak", st.session_state.best_streak)
 
+    # Recommended Focus callout — moved here from the v6.1 dashboard.
+    # Surfaces the weakest attempted chapter at the top of the diagnostic view.
+    focus_key = recommended_focus_chapter()
+    if focus_key:
+        focus_chapter = get_chapter(focus_key)
+        focus_emoji, focus_status_label = chapter_status(focus_key)
+        focus_mastery = chapter_mastery(focus_key)
+        with st.container(border=True):
+            st.markdown("### ⭐  Recommended focus")
+            st.caption("Your weakest attempted chapter.")
+            st.markdown(f"**Ch. {focus_chapter.number} — {focus_chapter.title}**")
+            st.markdown(f"{focus_emoji} {focus_status_label}  •  Mastery: {focus_mastery}")
+            if st.button(
+                "Practice this →",
+                key="progress_focus_practice",
+                type="primary",
+                use_container_width=True,
+            ):
+                start_chapter(focus_key)
+                st.rerun()
+
+    # Mastery by chapter — moved here from the v6.1 dashboard.
+    # Compact list showing emoji status, mastery score, and a per-chapter progress bar.
+    st.subheader("Mastery by chapter")
+    for chapter in CHAPTERS_LIST:
+        mastery = chapter_mastery(chapter.key)
+        emoji, status_label = chapter_status(chapter.key)
+        attempts = st.session_state.stats[chapter.key]["_overall"]["attempts"]
+
+        c_label, c_bar, c_btn = st.columns([4, 4, 1])
+        with c_label:
+            st.markdown(f"{emoji} **Ch. {chapter.number}.** {chapter.title}")
+            if attempts == 0:
+                st.caption(status_label)
+            else:
+                st.caption(f"{status_label}  •  Mastery: {mastery}  •  {attempts} attempts")
+        with c_bar:
+            st.write("")
+            st.progress(mastery / 100)
+        with c_btn:
+            st.write("")
+            if st.button("Practice", key=f"progress_practice_{chapter.key}", use_container_width=True):
+                start_chapter(chapter.key)
+                st.rerun()
+
+    # Accuracy by chapter — existing detailed breakdown stays, with the
+    # per-problem-type expander, as the deep-dive view below mastery.
     st.subheader("Accuracy by chapter")
     for chapter in CHAPTERS_LIST:
         overall = st.session_state.stats[chapter.key]["_overall"]
