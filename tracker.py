@@ -1,22 +1,36 @@
 """
-Session-state tracker for practice stats, streaks, and adaptive topic selection.
+Session-state tracker for stats, streaks, and adaptive selection.
 
-State lives in st.session_state, so it resets when the user refreshes the
-browser. Persistence (JSON file or SQLite) would be a v2 enhancement.
+Stats shape (nested):
+
+    {
+        "<chapter_key>": {
+            "_overall": {"attempts": int, "correct": int},
+            "<problem_type_key>": {"attempts": int, "correct": int},
+            ...more problem types...
+        },
+        ...more chapters...
+    }
+
+The "_overall" key rolls up all problem types in a chapter. The other keys
+match each ProblemType.key in that chapter.
 """
 
 import random
 import streamlit as st
 
-from problems import TOPICS
+from chapters import CHAPTERS_LIST
 
 
 def init_tracker():
-    """Set up all session-state keys if they don't exist yet."""
+    """Initialize all session-state keys if they don't exist yet."""
     if "stats" not in st.session_state:
-        st.session_state.stats = {
-            topic: {"attempts": 0, "correct": 0} for topic in TOPICS
-        }
+        stats = {}
+        for chapter in CHAPTERS_LIST:
+            stats[chapter.key] = {"_overall": {"attempts": 0, "correct": 0}}
+            for pt in chapter.problem_types:
+                stats[chapter.key][pt.key] = {"attempts": 0, "correct": 0}
+        st.session_state.stats = stats
     if "streak" not in st.session_state:
         st.session_state.streak = 0
     if "best_streak" not in st.session_state:
@@ -26,15 +40,18 @@ def init_tracker():
     if "last_result" not in st.session_state:
         st.session_state.last_result = None
     if "input_version" not in st.session_state:
-        # Bumped each time we generate a new problem so the answer input resets.
+        # Incremented each time we generate a new problem so the input widget resets.
         st.session_state.input_version = 0
 
 
-def record_attempt(topic_key, is_correct):
-    """Update stats and streak after the user submits an answer."""
-    st.session_state.stats[topic_key]["attempts"] += 1
+def record_attempt(chapter_key, problem_type_key, is_correct):
+    """Update both the problem-type stats and the chapter rollup."""
+    chap_stats = st.session_state.stats[chapter_key]
+    chap_stats["_overall"]["attempts"] += 1
+    chap_stats[problem_type_key]["attempts"] += 1
     if is_correct:
-        st.session_state.stats[topic_key]["correct"] += 1
+        chap_stats["_overall"]["correct"] += 1
+        chap_stats[problem_type_key]["correct"] += 1
         st.session_state.streak += 1
         if st.session_state.streak > st.session_state.best_streak:
             st.session_state.best_streak = st.session_state.streak
@@ -42,34 +59,55 @@ def record_attempt(topic_key, is_correct):
         st.session_state.streak = 0
 
 
-def pick_adaptive_topic():
-    """
-    Pick a topic with weight inversely proportional to accuracy.
+def _adaptive_weight(stats):
+    """Selection weight: lower accuracy -> higher weight.
 
     Topics with fewer than 3 attempts get a flat baseline weight so the
-    student explores all topics before adaptive logic kicks in fully.
+    student gets exposure across every topic before adaptive logic kicks in.
     """
-    topics = list(TOPICS.keys())
-    weights = []
-    for topic in topics:
-        stats = st.session_state.stats[topic]
-        if stats["attempts"] < 3:
-            weight = 1.0
-        else:
-            accuracy = stats["correct"] / stats["attempts"]
-            # Lower accuracy gets higher weight, clamped so even strong topics still appear.
-            weight = max(1.0 - accuracy, 0.1) * 2
-        weights.append(weight)
-    return random.choices(topics, weights=weights, k=1)[0]
+    if stats["attempts"] < 3:
+        return 1.0
+    accuracy = stats["correct"] / stats["attempts"]
+    return max(1.0 - accuracy, 0.1) * 2
 
 
-def get_weak_topics(threshold=0.7, min_attempts=3):
-    """Return topics with accuracy below threshold, sorted weakest first."""
+def pick_adaptive_chapter():
+    """Pick a chapter key, weighted by inverse overall accuracy."""
+    chapter_keys = [chapter.key for chapter in CHAPTERS_LIST]
+    weights = [
+        _adaptive_weight(st.session_state.stats[ck]["_overall"])
+        for ck in chapter_keys
+    ]
+    return random.choices(chapter_keys, weights=weights, k=1)[0]
+
+
+def pick_adaptive_problem_type(chapter):
+    """Pick a problem-type key from a chapter, weighted by inverse accuracy."""
+    keys = [pt.key for pt in chapter.problem_types]
+    weights = [
+        _adaptive_weight(st.session_state.stats[chapter.key][k])
+        for k in keys
+    ]
+    return random.choices(keys, weights=weights, k=1)[0]
+
+
+def chapter_accuracy(chapter_key):
+    s = st.session_state.stats[chapter_key]["_overall"]
+    return None if s["attempts"] == 0 else s["correct"] / s["attempts"]
+
+
+def problem_type_accuracy(chapter_key, problem_type_key):
+    s = st.session_state.stats[chapter_key][problem_type_key]
+    return None if s["attempts"] == 0 else s["correct"] / s["attempts"]
+
+
+def get_weak_chapters(threshold=0.7, min_attempts=3):
+    """Return (chapter_key, accuracy) pairs for chapters below threshold, weakest first."""
     weak = []
-    for topic_key in TOPICS:
-        stats = st.session_state.stats[topic_key]
-        if stats["attempts"] >= min_attempts:
-            accuracy = stats["correct"] / stats["attempts"]
+    for chapter in CHAPTERS_LIST:
+        overall = st.session_state.stats[chapter.key]["_overall"]
+        if overall["attempts"] >= min_attempts:
+            accuracy = overall["correct"] / overall["attempts"]
             if accuracy < threshold:
-                weak.append((topic_key, accuracy))
+                weak.append((chapter.key, accuracy))
     return sorted(weak, key=lambda pair: pair[1])
