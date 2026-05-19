@@ -249,7 +249,8 @@ with st.sidebar:
             start_chapter(chapter.key)
             st.rerun()
 
-
+st.divider()
+st.caption("Built by Donny Nguyen")
 # ============================================================
 # Dashboard (REDESIGNED for v6.5 — landing-page feel)
 # ============================================================
