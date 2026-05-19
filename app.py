@@ -201,7 +201,7 @@ def _on_nav_change():
 
 with st.sidebar:
     st.title("💊 DoseDrill")
-st.caption("Built by Donny Phi")
+    st.caption("Built by Donny Phi")
 
     st.markdown("**📊 This session**")
     row1 = st.columns(2)
