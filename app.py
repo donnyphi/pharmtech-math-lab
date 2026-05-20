@@ -1,5 +1,4 @@
-"""
-Pharmacy Tech Math Practice — Streamlit app (v6.5, polished dashboard).
+"""Pharmacy Tech Math Practice — Streamlit app (v6.5, polished dashboard).
 
 Layout overview:
     Sidebar    : session metrics, session-goal progress, page nav,
