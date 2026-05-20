@@ -90,13 +90,6 @@ def init_tracker():
     if "daily_goal_target" not in st.session_state:
         st.session_state.daily_goal_target = 5
 
-    # Timed practice session. None when not in a sprint. When active,
-    # a dict with keys: mode, target_questions, target_seconds, started_at,
-    # answered, correct, question_start, per_question_seconds, completed,
-    # end_reason. Set by start_timed_sprint() in app.py.
-    if "timed_session" not in st.session_state:
-        st.session_state.timed_session = None
-
 
 def reset_helpers():
     """Clear the helper toggles, cached example, and per-problem coach state.
@@ -287,24 +280,18 @@ def recommend_weak_topic():
 REVIEW_QUEUE_MAX = 20
 
 
-def push_review_queue(chapter_key, problem_type_key, question,
-                      correct_answer=None, unit=None, explanation_steps=None):
+def push_review_queue(chapter_key, problem_type_key, question):
     """Add a missed problem's metadata to the review queue.
 
-    Stores enough to regenerate a fresh problem of the same type AND to
-    surface the missed problem's answer/explanation in the Study Report.
-    The answer/unit/explanation_steps params are optional for backward
-    compatibility with any existing callers; the Study Report renders
-    whichever fields are populated.
+    Stores only what's needed to regenerate a fresh problem of the same type:
+    the chapter key, problem-type key, and a short question preview for the
+    queue display. FIFO eviction once the queue exceeds REVIEW_QUEUE_MAX.
     """
     preview = question if len(question) <= 140 else question[:137] + "..."
     entry = {
         "chapter_key": chapter_key,
         "problem_type_key": problem_type_key,
         "question_preview": preview,
-        "correct_answer": correct_answer,
-        "unit": unit,
-        "explanation_steps": explanation_steps,
     }
     queue = st.session_state.review_queue
     queue.append(entry)
