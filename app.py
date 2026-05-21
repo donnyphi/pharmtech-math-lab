@@ -745,12 +745,31 @@ def render_practice_view():
         render_work_it_out(chapter)
 
 
-def _render_timed_status_bar():
-    """Compact strip above the problem card during an active sprint."""
+def _timed_status_bar_body():
+    """Render the active-sprint status strip.
+
+    Reads elapsed/remaining from time.time() and timed_started_at on each
+    invocation — no counter to drift. Wrapped below with
+    st.fragment(run_every="1s") so this body re-renders every second
+    without rerunning the rest of the app.
+
+    For time-based sprints (2-minute / 5-minute), when elapsed crosses the
+    target this function triggers a full app rerun. render_practice_view's
+    top-level check then detects the expiry and routes to render_timed_summary.
+
+    Defensive early-returns guard against stale-state renders during the
+    transition frames where timed_mode is being flipped off.
+    """
+    if not st.session_state.get("timed_mode", False):
+        return
+
+    started_at = st.session_state.timed_started_at
+    if started_at is None:
+        return
+
     timed_type = st.session_state.timed_type
     answered = st.session_state.timed_answered
     correct = st.session_state.timed_correct
-    started_at = st.session_state.timed_started_at
     target_q = st.session_state.timed_target_questions
     target_s = st.session_state.timed_target_seconds
 
@@ -762,31 +781,18 @@ def _render_timed_status_bar():
     accuracy_text = f"Accuracy: {accuracy:.0%}" if answered > 0 else "Accuracy: —"
 
     if target_q:
+        # Question-based: show elapsed time. No auto-end on time.
         progress_text = f"Question {min(answered + 1, target_q)} of {target_q}"
         em, es = int(elapsed // 60), int(elapsed % 60)
-        time_html = f'Elapsed {em}:{es:02d}'
+        time_text = f"Elapsed {em}:{es:02d}"
+        time_expired = False
     else:
+        # Time-based: show remaining time. Auto-end when elapsed >= target.
         progress_text = f"Answered: {answered}"
         remaining = max(0, int(target_s - elapsed))
         rm, rs = remaining // 60, remaining % 60
-        ms_remaining = remaining * 1000
-        timer_id = f"dd-timer-{int(started_at)}"
-        time_html = (
-            f'Remaining <span id="{timer_id}">{rm}:{rs:02d}</span>'
-            f'<script>(function(){{'
-            f'  var endTime = Date.now() + {ms_remaining};'
-            f'  var el = document.getElementById("{timer_id}");'
-            f'  if (!el) return;'
-            f'  function tick() {{'
-            f'    var r = Math.max(0, endTime - Date.now());'
-            f'    var m = Math.floor(r / 60000);'
-            f'    var s = Math.floor((r % 60000) / 1000);'
-            f'    el.innerText = m + ":" + (s < 10 ? "0" + s : s);'
-            f'    if (r > 0) setTimeout(tick, 250);'
-            f'  }}'
-            f'  tick();'
-            f'}})();</script>'
-        )
+        time_text = f"Remaining {rm}:{rs:02d}"
+        time_expired = elapsed >= target_s
 
     st.markdown(
         f'<div style="background-color: rgba(245, 158, 11, 0.10); '
@@ -799,11 +805,38 @@ def _render_timed_status_bar():
         f'</div>'
         f'<div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; '
         f'font-size: 1rem; font-weight: 600;">'
-        f'{time_html}'
+        f'{time_text}'
         f'</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    # Auto-end on time-up: trigger a full app rerun so the page-routing
+    # logic in render_practice_view can detect the expiry and switch to
+    # the summary view. scope="app" is required to escape the fragment;
+    # falls back to plain st.rerun() on older Streamlit (<1.37).
+    if time_expired:
+        try:
+            st.rerun(scope="app")
+        except TypeError:
+            st.rerun()
+
+
+# Apply st.fragment(run_every="1s") if the API is available so the status
+# bar auto-refreshes every second WITHOUT rerunning the rest of the app.
+# Streamlit 1.37+ exposes st.fragment; 1.33-1.36 had it as
+# st.experimental_fragment. Older Streamlit has neither — in that case we
+# bind the body directly and the bar updates only on user interaction
+# (same behavior as before this fix, no regression).
+_fragment_factory = (
+    getattr(st, "fragment", None)
+    or getattr(st, "experimental_fragment", None)
+)
+
+if _fragment_factory is not None:
+    _render_timed_status_bar = _fragment_factory(run_every="1s")(_timed_status_bar_body)
+else:
+    _render_timed_status_bar = _timed_status_bar_body
 
 
 def render_timed_summary():
