@@ -1,27 +1,23 @@
-"""Pharmacy Tech Math Practice — Streamlit app (v6.5 + Timed Practice).
+"""Pharmacy Tech Math Practice — Streamlit app (v6.5 + Timed Practice setup page).
 
 Layout overview:
     Sidebar    : session metrics, session-goal progress, page nav,
                  difficulty selector, chapter list. UNCHANGED from v6.5.
     Dashboard  : hero → feature highlights → action cards
                  (Recommended Focus + Timed Practice) → optional queue
-                 expander → learning path.
-    Practice   : dual purpose. When a chapter is active, runs the coach-
-                 mode problem flow. When no chapter is active, surfaces
-                 the diagnostic content. When a timed sprint is active,
-                 a status bar wraps the problem and a summary view shows
-                 once the end condition is met.
+                 expander → learning path. The Timed Practice card is now
+                 a single-CTA card that opens a setup picker overlay.
+    Setup      : transient overlay reached by clicking the dashboard's
+                 "Start Timed Practice" button. Shows the four sprint
+                 options and a Back-to-Dashboard button. Driven by a
+                 single boolean (timed_setup_open). Not part of the page
+                 nav radio.
+    Practice   : when a chapter is active, runs the coach-mode problem
+                 flow. When no chapter is active, the diagnostic empty
+                 state. When a timed sprint is active, a status bar wraps
+                 the problem and a summary view shows once the end
+                 condition is met. UNCHANGED.
     Calculator : dose-to-volume reference. UNCHANGED.
-
-Change vs v6.5:
-    The dashboard's second action card (formerly Missed Problem Review)
-    is replaced by Timed Practice. The Review Missed Problems flow is
-    still accessible via the hero CTA and the queue expander. Sprint
-    state is tracked in seven new session_state keys (timed_mode,
-    timed_type, timed_target_questions, timed_target_seconds,
-    timed_started_at, timed_answered, timed_correct). The existing
-    answer-checking, mastery, streak, and review-queue logic are
-    completely untouched.
 
 Run with:
     streamlit run app.py
@@ -76,13 +72,11 @@ if st.session_state.current_page not in _VALID_PAGES:
     st.session_state.current_page = "Dashboard"
 
 # --- Timed Practice state ---
-# Seven keys, all live in app.py rather than tracker.py to keep tracker.py
-# at exactly the v6.5 state. The sprint is "over" when either:
+# Seven sprint-state keys, all live in app.py rather than tracker.py to keep
+# tracker.py at exactly the v6.5 state. The sprint is "over" when either:
 #   - time-based:    time.time() - timed_started_at >= timed_target_seconds
 #   - question-based: timed_answered >= timed_target_questions AND
 #                     current_problem is None
-# No "completed" flag is needed; those derived conditions drive the summary
-# view in render_practice_view().
 if "timed_mode" not in st.session_state:
     st.session_state.timed_mode = False
 if "timed_type" not in st.session_state:
@@ -97,6 +91,12 @@ if "timed_answered" not in st.session_state:
     st.session_state.timed_answered = 0
 if "timed_correct" not in st.session_state:
     st.session_state.timed_correct = 0
+
+# Timed setup overlay flag. When True, the routing renders the sprint-type
+# picker view instead of the underlying page. Cleared by any navigation
+# action that changes the underlying page.
+if "timed_setup_open" not in st.session_state:
+    st.session_state.timed_setup_open = False
 
 
 # Maps the four sprint type strings to their target_questions / target_seconds.
@@ -114,9 +114,9 @@ _TIMED_CONFIGS = {
 # ============================================================
 
 def _clear_timed_state():
-    """Reset all timed_* session_state keys back to their initial values.
-    Called when the user navigates away from a sprint or finishes one
-    via the summary buttons."""
+    """Reset all timed_* sprint-state keys back to their initial values.
+    Does NOT touch timed_setup_open — that's UI overlay state, handled
+    separately by each navigation entry point."""
     st.session_state.timed_mode = False
     st.session_state.timed_type = None
     st.session_state.timed_target_questions = None
@@ -157,35 +157,38 @@ def new_problem():
 
 def go_to_dashboard():
     """Clear practice state and return to the dashboard.
-    Also clears any active timed sprint (NEW)."""
+    Also clears any active timed sprint and the timed setup overlay."""
     st.session_state.selected_chapter_key = None
     st.session_state.mixed_mode = False
     st.session_state.current_problem = None
     st.session_state.last_result = None
     st.session_state.problem_type_choice = "_adaptive"
     st.session_state.current_page = "Dashboard"
+    st.session_state.timed_setup_open = False
     _clear_timed_state()
     reset_helpers()
 
 
 def start_chapter(chapter_key, problem_type_key="_adaptive"):
     """Enter practice mode for a specific chapter and route to Practice.
-    Clears any active timed sprint (NEW)."""
+    Clears any active timed sprint and the timed setup overlay."""
     st.session_state.selected_chapter_key = chapter_key
     st.session_state.mixed_mode = False
     st.session_state.problem_type_choice = problem_type_key
     st.session_state.current_page = "Practice"
+    st.session_state.timed_setup_open = False
     _clear_timed_state()
     new_problem()
 
 
 def start_mixed():
     """Enter mixed-practice mode across all chapters (untimed).
-    Clears any active timed sprint (NEW)."""
+    Clears any active timed sprint and the timed setup overlay."""
     st.session_state.mixed_mode = True
     st.session_state.selected_chapter_key = None
     st.session_state.problem_type_choice = "_adaptive"
     st.session_state.current_page = "Practice"
+    st.session_state.timed_setup_open = False
     _clear_timed_state()
     new_problem()
 
@@ -200,6 +203,7 @@ def practice_from_review(index):
 def start_timed_sprint(timed_type):
     """Begin a timed sprint. Sets the timed_* keys, enables mixed-mode
     adaptive selection, routes to Practice, and generates the first problem.
+    Also closes the timed setup overlay since the user has made a choice.
     timed_type must be one of: '5q', '10q', '2min', '5min'.
     """
     cfg = _TIMED_CONFIGS.get(timed_type)
@@ -220,6 +224,7 @@ def start_timed_sprint(timed_type):
     st.session_state.selected_chapter_key = None
     st.session_state.problem_type_choice = "_adaptive"
     st.session_state.current_page = "Practice"
+    st.session_state.timed_setup_open = False
     new_problem()
 
 
@@ -227,12 +232,8 @@ def check_answer(problem, user_answer):
     """Verify the answer and drive the coach state machine.
 
     Stats math preserved: record_attempt fires only on the FIRST submission,
-    so retries and self-corrections don't affect mastery or streak.
-
-    Timed-mode addition (NEW): on the FIRST submission only, timed_answered
-    increments. timed_correct increments only if the first submission was
-    correct. This matches the existing first-try rule used by mastery and
-    streak; retries don't double-count.
+    so retries and self-corrections don't affect mastery or streak. Timed
+    counters increment alongside on the FIRST submission only.
     """
     correct_value = problem["answer"]
     base_tolerance = max(abs(correct_value) * 0.01, problem["tolerance"])
@@ -250,7 +251,7 @@ def check_answer(problem, user_answer):
                 problem["problem_type_key"],
                 problem["question"],
             )
-        # Timed sprint counters (NEW). Independent of record_attempt above.
+        # Timed sprint counters. Independent of record_attempt above.
         if st.session_state.timed_mode:
             st.session_state.timed_answered += 1
             if is_correct:
@@ -288,12 +289,15 @@ def coach_reveal():
 
 
 # ============================================================
-# Sidebar (UNCHANGED from v6.5)
+# Sidebar (UNCHANGED)
 # ============================================================
 
 def _on_nav_change():
-    """Sync current_page when the user clicks the navigation radio."""
+    """Sync current_page when the user clicks the navigation radio.
+    Also closes the timed setup overlay since a nav change implies the
+    user wants to leave the dashboard context."""
     st.session_state.current_page = st.session_state.nav_choice
+    st.session_state.timed_setup_open = False
 
 
 with st.sidebar:
@@ -349,13 +353,11 @@ with st.sidebar:
 
 
 # ============================================================
-# Dashboard (v6.5 layout, with the second action card swapped)
+# Dashboard
 # ============================================================
 
 def _section_label(text):
-    """Small uppercase section label. Used above each Dashboard section
-    that contains multiple cards, to anchor the eye and create rhythm
-    without taking much vertical space."""
+    """Small uppercase section label."""
     st.markdown(
         f'<p style="opacity:0.55; font-size:0.8rem; '
         f'text-transform:uppercase; letter-spacing:0.06em; '
@@ -365,13 +367,8 @@ def _section_label(text):
 
 
 def render_dashboard():
-    """Action-oriented learning-platform landing page.
-
-    Section order: announcement → hero → feature highlights → action cards
-    (Recommended Focus + Timed Practice) → optional queue expander →
-    learning path. UNCHANGED from v6.5 except that the second action card
-    is now Timed Practice instead of Missed Problem Review.
-    """
+    """Action-oriented learning-platform landing page. UNCHANGED structure;
+    only the Timed Practice card itself was reshaped to a single CTA."""
     _render_announcement_strip()
     _render_hero()
     st.write("")
@@ -384,10 +381,7 @@ def render_dashboard():
 
 
 def _render_announcement_strip():
-    """Thin notification banner at the top of the dashboard. Context-aware:
-    flips to a review-focused message when the user has missed problems
-    queued, otherwise highlights the coach-mode feature.
-    """
+    """Thin notification banner. Context-aware."""
     if review_queue_size() > 0:
         message = "<strong>New:</strong> Missed problems are saved for review."
     else:
@@ -405,11 +399,7 @@ def _render_announcement_strip():
 
 
 def _render_hero():
-    """Landing-page hero: large title, descriptive subtitle, two primary CTAs.
-    The Review Missed Problems CTA here is the user's main entry point for
-    the review queue now that the bottom card has been swapped to Timed
-    Practice.
-    """
+    """Landing-page hero."""
     queue_size = review_queue_size()
     with st.container(border=True):
         st.markdown(
@@ -453,10 +443,7 @@ def _render_hero():
 
 
 def _render_feature_highlights():
-    """Three-column 'How it works' section. Each card centers a large icon
-    above a bold title and a one-paragraph description. No buttons — these
-    are explanatory cards, not CTAs.
-    """
+    """Three-column 'How it works' section."""
     _section_label("How it works")
 
     features = [
@@ -485,12 +472,7 @@ def _render_feature_highlights():
 
 
 def _render_action_cards():
-    """Side-by-side Recommended Focus and Timed Practice.
-
-    CHANGED in this version: the right card is now Timed Practice instead
-    of Missed Problem Review. The review flow is still accessible via the
-    hero CTA and the queue expander below.
-    """
+    """Side-by-side Recommended Focus + Timed Practice."""
     _section_label("Personalized for you")
     col_focus, col_timed = st.columns(2, gap="medium")
     with col_focus:
@@ -500,12 +482,7 @@ def _render_action_cards():
 
 
 def _render_focus_card():
-    """Action card A: Recommended Focus.
-
-    Three states (has-focus / no-data / all-mastered) share a uniform
-    structure so this card matches the visual height of the Timed Practice
-    card next to it.
-    """
+    """Action card A: Recommended Focus. UNCHANGED."""
     focus_key = recommended_focus_chapter()
     with st.container(border=True):
         st.markdown("### ⭐  Recommended Focus")
@@ -551,58 +528,33 @@ def _render_focus_card():
 
 
 def _render_timed_practice_card():
-    """Action card B (replacement for Missed Problem Review): Timed Practice.
+    """Action card B: Timed Practice (single-CTA version).
 
-    Four sprint options as buttons in a 2x2 grid. Clicking any one starts a
-    sprint in mixed adaptive mode. The sprint uses the existing problem
-    generators and answer-checking logic; only the sprint-specific counters
-    are new.
+    Shows only the title, caption, and one primary button. Clicking the
+    button sets timed_setup_open = True; the page routing then renders
+    render_timed_setup() (the picker overlay) instead of dashboard. The
+    four sprint options live on the setup view, not directly on the card.
     """
     with st.container(border=True):
         st.markdown("### ⏱  Timed Practice")
         st.caption("Build speed under realistic time pressure.")
-
-        r1c1, r1c2 = st.columns(2)
-        with r1c1:
-            if st.button(
-                "5-question sprint",
-                key="timed_pick_5q",
-                use_container_width=True,
-            ):
-                start_timed_sprint("5q")
-                st.rerun()
-        with r1c2:
-            if st.button(
-                "10-question sprint",
-                key="timed_pick_10q",
-                use_container_width=True,
-            ):
-                start_timed_sprint("10q")
-                st.rerun()
-
-        r2c1, r2c2 = st.columns(2)
-        with r2c1:
-            if st.button(
-                "2-minute sprint",
-                key="timed_pick_2min",
-                use_container_width=True,
-            ):
-                start_timed_sprint("2min")
-                st.rerun()
-        with r2c2:
-            if st.button(
-                "5-minute sprint",
-                key="timed_pick_5min",
-                use_container_width=True,
-            ):
-                start_timed_sprint("5min")
-                st.rerun()
+        # Two blank lines roughly match the visual height of _render_focus_card
+        # so the Personalized-for-you row keeps its parity across states.
+        st.write("")
+        st.write("")
+        if st.button(
+            "Start Timed Practice →",
+            key="timed_card_start",
+            type="primary",
+            use_container_width=True,
+        ):
+            st.session_state.timed_setup_open = True
+            st.rerun()
 
 
 def _render_review_expander():
     """Compact per-item queue list. Renders only when queue is non-empty.
-    Kept from v6.5 so the missed-problem queue is still browsable after
-    the Missed Problem Review card was swapped out."""
+    UNCHANGED."""
     queue_size = review_queue_size()
     if queue_size == 0:
         return
@@ -636,9 +588,7 @@ def _render_review_expander():
 
 
 def _render_learning_path():
-    """Three-tier curriculum preview with chapter topic hints below each
-    tier's description. Informational only — no buttons.
-    """
+    """Three-tier curriculum preview. UNCHANGED."""
     _section_label("The full curriculum")
 
     tiers = [
@@ -671,30 +621,79 @@ def _render_learning_path():
 
 
 # ============================================================
-# Practice (v6.5 flow + timed status bar + summary detection)
+# Timed Practice setup (NEW)
+# ============================================================
+
+def render_timed_setup():
+    """Sprint-type picker overlay. Reached by clicking 'Start Timed Practice'
+    on the dashboard card. Shows the four sprint options as rows with a
+    brief description each, plus a Back-to-Dashboard button at the top.
+
+    Clicking any sprint button calls start_timed_sprint, which sets up the
+    timed_* state and routes the user to the Practice page. Clicking Back
+    closes the overlay without starting a sprint.
+
+    This view is NOT a member of _VALID_PAGES. It's an overlay driven by
+    timed_setup_open, so the page nav radio still shows 'Dashboard' while
+    the user is choosing a sprint.
+    """
+    back_col, title_col = st.columns([1, 5])
+    with back_col:
+        if st.button(
+            "← Back to Dashboard",
+            key="ts_setup_back",
+            use_container_width=True,
+        ):
+            st.session_state.timed_setup_open = False
+            st.session_state.current_page = "Dashboard"
+            st.rerun()
+    with title_col:
+        st.markdown("### ⏱  Timed Practice")
+        st.caption("Pick a sprint type to get started.")
+
+    st.write("")
+
+    sprints = [
+        ("5q", "5-question sprint",
+         "Short adaptive set, no clock. Answer five and see how you did."),
+        ("10q", "10-question sprint",
+         "A longer set for a more representative score."),
+        ("2min", "2-minute sprint",
+         "Race against the clock. Answer as many as you can in two minutes."),
+        ("5min", "5-minute sprint",
+         "Same drill, with five minutes on the clock."),
+    ]
+
+    for key, label, desc in sprints:
+        with st.container(border=True):
+            c_label, c_btn = st.columns([3, 1])
+            with c_label:
+                st.markdown(f"**{label}**")
+                st.caption(desc)
+            with c_btn:
+                st.write("")
+                if st.button(
+                    "Start →",
+                    key=f"setup_{key}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    start_timed_sprint(key)
+                    st.rerun()
+
+
+# ============================================================
+# Practice (UNCHANGED)
 # ============================================================
 
 def render_practice_view():
-    """Practice page entry point.
-
-    Tri-state:
-      - Timed sprint end condition met → render_timed_summary (NEW)
-      - No chapter selected             → render_practice_empty_state
-      - Chapter selected                → active practice flow,
-                                          with a status bar on top if a
-                                          sprint is active.
-    """
-    # NEW: timed sprint end detection. Checked first so the summary takes
-    # precedence over any other practice rendering.
+    """Practice page entry point."""
     if st.session_state.timed_mode:
-        # Time-based: time expired.
         if st.session_state.timed_target_seconds is not None:
             elapsed = time.time() - st.session_state.timed_started_at
             if elapsed >= st.session_state.timed_target_seconds:
                 render_timed_summary()
                 return
-        # Question-based: target reached AND user clicked Next on the
-        # final question (which set current_problem = None).
         if (
             st.session_state.timed_target_questions is not None
             and st.session_state.timed_answered >= st.session_state.timed_target_questions
@@ -713,7 +712,6 @@ def render_practice_view():
     if st.session_state.current_problem is None:
         new_problem()
 
-    # NEW: status bar above the problem during an active sprint.
     if st.session_state.timed_mode:
         _render_timed_status_bar()
 
@@ -748,13 +746,7 @@ def render_practice_view():
 
 
 def _render_timed_status_bar():
-    """Compact strip above the problem card during an active sprint.
-
-    Shows mode label, question/answered progress, accuracy, and time
-    elapsed/remaining. Time-based sprints get an inline JS countdown so the
-    user gets live visual feedback (no external packages, just vanilla JS).
-    The authoritative time check happens server-side in render_practice_view.
-    """
+    """Compact strip above the problem card during an active sprint."""
     timed_type = st.session_state.timed_type
     answered = st.session_state.timed_answered
     correct = st.session_state.timed_correct
@@ -770,12 +762,10 @@ def _render_timed_status_bar():
     accuracy_text = f"Accuracy: {accuracy:.0%}" if answered > 0 else "Accuracy: —"
 
     if target_q:
-        # Question-based: show "Question N of T" and elapsed time.
         progress_text = f"Question {min(answered + 1, target_q)} of {target_q}"
         em, es = int(elapsed // 60), int(elapsed % 60)
         time_html = f'Elapsed {em}:{es:02d}'
     else:
-        # Time-based: show "Answered: N" and a live countdown for time remaining.
         progress_text = f"Answered: {answered}"
         remaining = max(0, int(target_s - elapsed))
         rm, rs = remaining // 60, remaining % 60
@@ -817,10 +807,7 @@ def _render_timed_status_bar():
 
 
 def render_timed_summary():
-    """Post-sprint summary. Four metrics, optional Recommended Focus note,
-    and two buttons (Return to Dashboard / Start another sprint).
-    Rendered inside the Practice page when the sprint end conditions are met.
-    """
+    """Post-sprint summary."""
     timed_type = st.session_state.timed_type
     answered = st.session_state.timed_answered
     correct = st.session_state.timed_correct
@@ -830,9 +817,6 @@ def render_timed_summary():
     cfg = _TIMED_CONFIGS.get(timed_type, {"label": "Timed sprint"})
     mode_label = cfg["label"]
 
-    # Cap elapsed at the time target so the avg-time/Q stays meaningful for
-    # time-based sprints that ran over slightly between the actual deadline
-    # and the next render.
     elapsed = time.time() - started_at if started_at else 0.0
     if target_s is not None:
         elapsed = min(elapsed, float(target_s))
@@ -852,7 +836,6 @@ def render_timed_summary():
 
     st.write("")
 
-    # Recommended focus note, if a weakest chapter is identifiable.
     focus_key = recommended_focus_chapter()
     if focus_key:
         focus_ch = get_chapter(focus_key)
@@ -864,7 +847,6 @@ def render_timed_summary():
         )
         st.write("")
 
-    # Two-button exit row.
     b1, b2 = st.columns(2)
     with b1:
         if st.button(
@@ -882,8 +864,6 @@ def render_timed_summary():
             type="primary",
             use_container_width=True,
         ):
-            # Restart the same sprint type. Read timed_type BEFORE clearing
-            # since _clear_timed_state nulls it.
             same_type = st.session_state.timed_type
             _clear_timed_state()
             if same_type is not None:
@@ -894,9 +874,7 @@ def render_timed_summary():
 
 
 def render_practice_empty_state():
-    """Practice page when no chapter is active. Houses the diagnostic content
-    that used to live on the Progress page. UNCHANGED from v6.5.
-    """
+    """Practice page when no chapter is active. UNCHANGED."""
     st.title("Practice")
     st.caption("Pick a chapter from the sidebar, or use the quick-start options below.")
     st.write("")
@@ -1020,7 +998,7 @@ def render_practice_empty_state():
 
 
 def render_problem_card(chapter, problem):
-    """UNCHANGED from v6.5."""
+    """UNCHANGED."""
     with st.container(border=True):
         if not st.session_state.mixed_mode:
             render_skill_picker(chapter)
@@ -1044,8 +1022,7 @@ def render_problem_card(chapter, problem):
 
 
 def render_answer_input(problem):
-    """Number input + Check button. Used for both first attempt and retry.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     user_answer = st.number_input(
         f"Your answer ({problem['unit']})",
         value=0.0,
@@ -1059,8 +1036,7 @@ def render_answer_input(problem):
 
 
 def render_coach_intervention(problem):
-    """First-wrong screen: gentle message + Hint / Try again / Show solution.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     result = st.session_state.last_result
     st.warning(
         f"That's not it. You entered {result['user_answer']} {result['unit']}. "
@@ -1098,13 +1074,7 @@ def render_coach_intervention(problem):
 
 
 def render_revealed_result():
-    """Terminal state: full result + step-by-step + Next problem.
-
-    Timed-sprint addition (NEW): when the question-based target has been
-    reached, Next problem doesn't generate a new problem. Instead it sets
-    current_problem = None so the next render of render_practice_view
-    detects the end condition and routes to the summary view.
-    """
+    """UNCHANGED (sprint-end Next-button branch preserved from previous version)."""
     result = st.session_state.last_result
     attempt_number = result.get("attempt_number", 1)
 
@@ -1127,8 +1097,6 @@ def render_revealed_result():
             st.write(f"• {step}")
 
     if st.button("Next problem →", type="primary", use_container_width=True):
-        # NEW: question-based sprint at target → end sprint instead of
-        # generating the next problem.
         if (
             st.session_state.timed_mode
             and st.session_state.timed_target_questions is not None
@@ -1142,8 +1110,7 @@ def render_revealed_result():
 
 
 def render_skill_picker(chapter):
-    """Horizontal radio to switch problem type within a chapter.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     options = [("_adaptive", "Adaptive")] + [(pt.key, pt.label) for pt in chapter.problem_types]
     keys = [k for k, _ in options]
     labels = [lbl for _, lbl in options]
@@ -1169,8 +1136,7 @@ def render_skill_picker(chapter):
 
 
 def render_helper_buttons(chapter, problem):
-    """Three toggle buttons across the top of the problem card.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     b1, b2, b3 = st.columns(3)
     with b1:
         ex_type = "primary" if st.session_state.show_example else "secondary"
@@ -1208,8 +1174,7 @@ def render_helper_buttons(chapter, problem):
 
 
 def render_helper_content(chapter, problem):
-    """Show the panels for whichever helper toggles are on.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     if st.session_state.show_formula:
         st.info(f"**Formula / setup**\n\n{chapter.formula}")
 
@@ -1230,8 +1195,7 @@ def render_helper_content(chapter, problem):
 
 
 def render_work_it_out(chapter):
-    """Recommend the prerequisite chapter after a wrong answer.
-    UNCHANGED from v6.5."""
+    """UNCHANGED."""
     prereq = get_chapter(chapter.prerequisite_chapter)
     with st.container(border=True):
         st.markdown("#### 🔧 Work it out")
@@ -1252,26 +1216,31 @@ def render_work_it_out(chapter):
 
 
 # ============================================================
-# Page routing (UNCHANGED from v6.5)
+# Page routing
 # ============================================================
 
-page = st.session_state.current_page
+# NEW: timed setup overlay takes precedence. When timed_setup_open is True,
+# render the picker overlay instead of the normal current_page routing.
+if st.session_state.timed_setup_open:
+    render_timed_setup()
+else:
+    page = st.session_state.current_page
 
-if page == "Dashboard":
-    render_dashboard()
+    if page == "Dashboard":
+        render_dashboard()
 
-elif page == "Practice":
-    render_practice_view()
+    elif page == "Practice":
+        render_practice_view()
 
-elif page == "Calculator":
-    st.title("Calculator")
-    st.caption("Quick reference. Results here are not tracked in practice stats.")
-    dose = st.number_input("Ordered dose (mg)", min_value=0.0, value=500.0, step=10.0)
-    strength = st.number_input(
-        "Stock strength (mg per mL)", min_value=0.01, value=250.0, step=10.0
-    )
-    volume = dose / strength
-    st.write(f"Volume needed: **{volume:.2f} mL**")
-    st.caption(
-        f"Formula: volume = dose / strength = {dose} / {strength} = {volume:.2f} mL."
-    )
+    elif page == "Calculator":
+        st.title("Calculator")
+        st.caption("Quick reference. Results here are not tracked in practice stats.")
+        dose = st.number_input("Ordered dose (mg)", min_value=0.0, value=500.0, step=10.0)
+        strength = st.number_input(
+            "Stock strength (mg per mL)", min_value=0.01, value=250.0, step=10.0
+        )
+        volume = dose / strength
+        st.write(f"Volume needed: **{volume:.2f} mL**")
+        st.caption(
+            f"Formula: volume = dose / strength = {dose} / {strength} = {volume:.2f} mL."
+        )
