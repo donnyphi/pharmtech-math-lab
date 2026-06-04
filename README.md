@@ -8,9 +8,9 @@ Add live Streamlit link here.
 
 ## Screenshot
 
-```md
+
 ![PharmTech Math Lab screenshot](assets/screenshot.png)
-```
+
 
 ## Why I Built This
 
