@@ -6,7 +6,7 @@ A Streamlit app that helps pharmacy technician students practice dosage calculat
 
 https://donnyphi-dose-drill.streamlit.app/
 
-## Screenshot
+## Dashboard
 
 
 ![PharmTech Math Lab screenshot](assets/screenshot.png)
