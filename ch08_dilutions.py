@@ -1,3 +1,4 @@
+.
 """Chapter 8: Dilutions.
 
 The textbook does NOT use C1V1 = C2V2. It uses the grams-based method:
