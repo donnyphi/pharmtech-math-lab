@@ -1,4 +1,4 @@
-.
+
 """Chapter 6: Dosage Calculations Based on Body Surface Area.
 
 BSA is expressed in m² and obtained from a nomogram using patient height and weight.
