@@ -1,4 +1,4 @@
-.
+
 """
 Pharmacy Tech Math — all chapters in one module.
 
