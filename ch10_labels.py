@@ -1,4 +1,4 @@
-.
+
 """Chapter 10: Dosage Calculations from Medication Labels.
 
 The student reads the concentration from a medication label and calculates the volume
