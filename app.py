@@ -1,4 +1,4 @@
-.
+
 """Pharmacy Tech Math Practice — Streamlit app (v6.5 + Timed Practice setup page).
 
 Layout overview:
