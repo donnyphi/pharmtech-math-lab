@@ -24,6 +24,8 @@ Run with:
     streamlit run app.py
 """
 
+import html
+import re
 import time
 import streamlit as st
 
@@ -684,8 +686,328 @@ def render_timed_setup():
 
 
 # ============================================================
-# Practice (UNCHANGED)
+# Practice
 # ============================================================
+
+_VALUE_TOKEN_RE = re.compile(
+    r"\b\d[\d,]*(?:\.\d+)?(?:\s*(?:"
+    r"mg/kg|mg/mL|mcg/mL|units/mL|mEq/mL|gtt/min|mL/hr|"
+    r"mg|mcg|g|mL|L|kg|lb|pounds?|units?|mEq|hours?|hrs?|"
+    r"minutes?|mins?|min|%))?",
+    re.IGNORECASE,
+)
+
+
+def _html(text):
+    """Escape generated problem text before rendering custom markup."""
+    return html.escape(str(text), quote=True)
+
+
+def _highlight_problem_values(text):
+    """Emphasize numbers and units in the prompt without changing the problem."""
+    escaped = _html(text)
+    return _VALUE_TOKEN_RE.sub(
+        lambda match: f'<span class="practice-value">{match.group(0)}</span>',
+        escaped,
+    )
+
+
+def _render_practice_styles():
+    """Practice-only visual system."""
+    st.markdown(
+        """
+        <style>
+            .practice-eyebrow {
+                color: #64748b;
+                font-size: 0.74rem;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                margin: 0 0 0.45rem;
+                text-transform: uppercase;
+            }
+            .practice-header {
+                border-bottom: 1px solid #e2e8f0;
+                margin-bottom: 1.1rem;
+                padding-bottom: 0.95rem;
+            }
+            .practice-header h2 {
+                color: #111827;
+                font-size: 1.45rem;
+                line-height: 1.25;
+                margin: 0;
+            }
+            .practice-header p {
+                color: #64748b;
+                font-size: 0.94rem;
+                margin: 0.35rem 0 0;
+            }
+            .practice-meta-grid {
+                display: grid;
+                gap: 0.6rem;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                margin-bottom: 1rem;
+            }
+            .practice-meta-item {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 0.7rem 0.8rem;
+            }
+            .practice-meta-label {
+                color: #64748b;
+                font-size: 0.72rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                margin-bottom: 0.22rem;
+                text-transform: uppercase;
+            }
+            .practice-meta-value {
+                color: #0f172a;
+                font-size: 0.9rem;
+                font-weight: 650;
+                line-height: 1.35;
+            }
+            .practice-prompt {
+                background: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-left: 4px solid #0f766e;
+                border-radius: 6px;
+                margin: 0.35rem 0 0.85rem;
+                padding: 1rem 1.05rem;
+            }
+            .practice-prompt-label {
+                color: #475569;
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                margin-bottom: 0.45rem;
+                text-transform: uppercase;
+            }
+            .practice-question {
+                color: #111827;
+                font-size: 1.22rem;
+                font-weight: 650;
+                line-height: 1.55;
+            }
+            .practice-value {
+                background: #ecfdf5;
+                border: 1px solid #a7f3d0;
+                border-radius: 4px;
+                color: #064e3b;
+                display: inline-block;
+                font-weight: 750;
+                padding: 0 0.22rem;
+            }
+            .practice-target {
+                align-items: center;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                display: flex;
+                justify-content: space-between;
+                gap: 0.75rem;
+                margin-bottom: 1rem;
+                padding: 0.75rem 0.85rem;
+            }
+            .practice-target span {
+                color: #64748b;
+                display: block;
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+            }
+            .practice-target strong {
+                color: #0f172a;
+                display: block;
+                font-size: 1rem;
+                margin-top: 0.12rem;
+            }
+            .practice-unit-badge {
+                background: #0f766e;
+                border-radius: 999px;
+                color: #ffffff;
+                font-size: 0.92rem;
+                font-weight: 750;
+                min-width: 4.5rem;
+                padding: 0.35rem 0.7rem;
+                text-align: center;
+            }
+            .practice-tool-label {
+                color: #475569;
+                font-size: 0.82rem;
+                font-weight: 700;
+                margin: 0.25rem 0 0.45rem;
+            }
+            .practice-panel {
+                background: #f8fafc;
+                border: 1px solid #dbe4ee;
+                border-radius: 6px;
+                margin: 0.75rem 0;
+                padding: 0.9rem 1rem;
+            }
+            .practice-panel-title {
+                color: #0f172a;
+                font-size: 0.95rem;
+                font-weight: 750;
+                margin-bottom: 0.35rem;
+            }
+            .practice-panel-body {
+                color: #334155;
+                font-size: 0.94rem;
+                line-height: 1.55;
+            }
+            .practice-answer-shell {
+                border-top: 1px solid #e2e8f0;
+                margin-top: 1.1rem;
+                padding-top: 1rem;
+            }
+            .practice-feedback {
+                border-radius: 6px;
+                margin: 0.15rem 0 0.9rem;
+                padding: 0.85rem 1rem;
+            }
+            .practice-feedback-title {
+                font-weight: 750;
+                margin-bottom: 0.2rem;
+            }
+            .practice-feedback-body {
+                line-height: 1.5;
+            }
+            .practice-feedback.correct {
+                background: #f0fdf4;
+                border: 1px solid #bbf7d0;
+                color: #14532d;
+            }
+            .practice-feedback.coach {
+                background: #fffbeb;
+                border: 1px solid #fde68a;
+                color: #713f12;
+            }
+            .practice-feedback.review {
+                background: #fff7ed;
+                border: 1px solid #fed7aa;
+                color: #7c2d12;
+            }
+            .solution-list {
+                color: #1f2937;
+                line-height: 1.55;
+                margin: 0.25rem 0 0;
+                padding-left: 1.25rem;
+            }
+            .solution-list li {
+                margin: 0.45rem 0;
+                padding-left: 0.15rem;
+            }
+            @media (max-width: 700px) {
+                .practice-meta-grid {
+                    grid-template-columns: 1fr;
+                }
+                .practice-target {
+                    align-items: flex-start;
+                    flex-direction: column;
+                }
+                .practice-question {
+                    font-size: 1.08rem;
+                }
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_practice_header(chapter):
+    if st.session_state.mixed_mode:
+        title = "Mixed practice"
+        subtitle = f"Current chapter: Ch. {chapter.number} - {chapter.title}"
+    else:
+        title = f"Ch. {chapter.number}. {chapter.title}"
+        subtitle = chapter.summary
+
+    st.markdown(
+        f"""
+        <div class="practice-header">
+            <div class="practice-eyebrow">Practice worksheet</div>
+            <h2>{_html(title)}</h2>
+            <p>{_html(subtitle)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_problem_metadata(chapter, problem):
+    difficulty = st.session_state.get("difficulty", "Standard")
+    mode = "Mixed adaptive" if st.session_state.mixed_mode else "Chapter focus"
+
+    st.markdown(
+        f"""
+        <div class="practice-meta-grid">
+            <div class="practice-meta-item">
+                <div class="practice-meta-label">Chapter</div>
+                <div class="practice-meta-value">Ch. {chapter.number}: {_html(chapter.title)}</div>
+            </div>
+            <div class="practice-meta-item">
+                <div class="practice-meta-label">Calculation type</div>
+                <div class="practice-meta-value">{_html(problem["problem_type_label"])}</div>
+            </div>
+            <div class="practice-meta-item">
+                <div class="practice-meta-label">Mode / difficulty</div>
+                <div class="practice-meta-value">{_html(mode)} - {_html(difficulty)}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_problem_prompt(problem):
+    st.markdown(
+        f"""
+        <div class="practice-prompt">
+            <div class="practice-prompt-label">Calculation prompt</div>
+            <div class="practice-question">{_highlight_problem_values(problem["question"])}</div>
+        </div>
+        <div class="practice-target">
+            <div>
+                <span>Target answer</span>
+                <strong>Enter a numeric value using the required unit.</strong>
+            </div>
+            <div class="practice-unit-badge">{_html(problem["unit"])}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_panel(title, body):
+    st.markdown(
+        f"""
+        <div class="practice-panel">
+            <div class="practice-panel-title">{_html(title)}</div>
+            <div class="practice-panel-body">{body}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_feedback(kind, title, body):
+    st.markdown(
+        f"""
+        <div class="practice-feedback {kind}">
+            <div class="practice-feedback-title">{_html(title)}</div>
+            <div class="practice-feedback-body">{body}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_solution_steps(steps):
+    items = "".join(f"<li>{_html(step)}</li>" for step in steps)
+    st.markdown(f'<ol class="solution-list">{items}</ol>', unsafe_allow_html=True)
 
 def render_practice_view():
     """Practice page entry point."""
@@ -718,6 +1040,7 @@ def render_practice_view():
 
     problem = st.session_state.current_problem
     chapter = get_chapter(problem["chapter_key"])
+    _render_practice_styles()
 
     top_back, top_title = st.columns([1, 5])
     with top_back:
@@ -725,12 +1048,7 @@ def render_practice_view():
             go_to_dashboard()
             st.rerun()
     with top_title:
-        if st.session_state.mixed_mode:
-            st.markdown("### 🎯  Mixed practice")
-            st.caption(f"Currently on: Ch. {chapter.number} — {chapter.title}")
-        else:
-            st.markdown(f"### Ch. {chapter.number}. {chapter.title}")
-            st.caption(chapter.summary)
+        _render_practice_header(chapter)
 
     st.write("")
     render_problem_card(chapter, problem)
@@ -802,7 +1120,7 @@ def _timed_status_bar_body():
         f'display: flex; align-items: center; justify-content: space-between; '
         f'flex-wrap: wrap; gap: 0.75rem;">'
         f'<div style="font-size: 0.92rem;">'
-        f'<strong>⏱ {mode_label}</strong> &nbsp;·&nbsp; {progress_text} &nbsp;·&nbsp; {accuracy_text}'
+        f'<strong>Timed sprint: {mode_label}</strong> &nbsp;·&nbsp; {progress_text} &nbsp;·&nbsp; {accuracy_text}'
         f'</div>'
         f'<div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; '
         f'font-size: 1rem; font-weight: 600;">'
@@ -858,7 +1176,8 @@ def render_timed_summary():
     accuracy = (correct / answered) if answered > 0 else 0.0
     avg_time = (elapsed / answered) if answered > 0 else 0.0
 
-    st.markdown("### 🏁  Sprint complete")
+    _render_practice_styles()
+    st.markdown("### Sprint complete")
     st.caption(mode_label)
     st.write("")
 
@@ -1032,20 +1351,24 @@ def render_practice_empty_state():
 
 
 def render_problem_card(chapter, problem):
-    """UNCHANGED."""
+    """Render the active practice problem as a focused worksheet."""
     with st.container(border=True):
+        _render_problem_metadata(chapter, problem)
+
         if not st.session_state.mixed_mode:
+            st.markdown('<div class="practice-tool-label">Skill focus</div>', unsafe_allow_html=True)
             render_skill_picker(chapter)
 
+        _render_problem_prompt(problem)
         render_helper_buttons(chapter, problem)
         render_helper_content(chapter, problem)
 
-        st.divider()
-
-        st.caption(problem["problem_type_label"])
-        st.markdown(f"#### {problem['question']}")
-        st.write("")
-
+        st.markdown(
+            '<div class="practice-answer-shell">'
+            '<div class="practice-tool-label">Your response</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         phase = st.session_state.problem_phase
         if phase == "answering":
             render_answer_input(problem)
@@ -1056,31 +1379,49 @@ def render_problem_card(chapter, problem):
 
 
 def render_answer_input(problem):
-    """UNCHANGED."""
-    user_answer = st.number_input(
-        f"Your answer ({problem['unit']})",
-        value=0.0,
-        step=0.1,
-        format="%.2f",
-        key=f"answer_input_{st.session_state.input_version}",
-    )
+    """Collect the student's numeric answer without changing scoring logic."""
+    entry_col, unit_col = st.columns([3, 1])
+    with entry_col:
+        user_answer = st.number_input(
+            "Numeric answer",
+            value=0.0,
+            step=0.1,
+            format="%.2f",
+            key=f"answer_input_{st.session_state.input_version}",
+        )
+    with unit_col:
+        st.markdown(
+            f"""
+            <div class="practice-meta-item">
+                <div class="practice-meta-label">Required unit</div>
+                <div class="practice-meta-value">{_html(problem["unit"])}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     if st.button("Check answer", type="primary", use_container_width=True):
         check_answer(problem, user_answer)
         st.rerun()
 
 
 def render_coach_intervention(problem):
-    """UNCHANGED."""
+    """Offer the same first-wrong coach choices with calmer feedback."""
     result = st.session_state.last_result
-    st.warning(
-        f"That's not it. You entered {result['user_answer']} {result['unit']}. "
-        "Take another look. Want a hint, another try, or the full solution?"
+    _render_feedback(
+        "coach",
+        "Review before submitting again",
+        (
+            f"You entered <strong>{_html(result['user_answer'])} "
+            f"{_html(result['unit'])}</strong>. Check the setup, unit conversion, "
+            "and final unit before your next attempt."
+        ),
     )
 
     c1, c2, c3 = st.columns(3)
     with c1:
         if st.button(
-            "💡 Get a hint",
+            "Use hint",
             type="secondary",
             use_container_width=True,
             key="coach_hint",
@@ -1089,7 +1430,7 @@ def render_coach_intervention(problem):
             st.rerun()
     with c2:
         if st.button(
-            "🔄 Try again",
+            "Try again",
             type="primary",
             use_container_width=True,
             key="coach_retry",
@@ -1098,7 +1439,7 @@ def render_coach_intervention(problem):
             st.rerun()
     with c3:
         if st.button(
-            "📖 Show solution",
+            "Show solution",
             type="secondary",
             use_container_width=True,
             key="coach_show",
@@ -1108,29 +1449,44 @@ def render_coach_intervention(problem):
 
 
 def render_revealed_result():
-    """UNCHANGED (sprint-end Next-button branch preserved from previous version)."""
+    """Show instructional feedback and preserve sprint-end branching."""
     result = st.session_state.last_result
     attempt_number = result.get("attempt_number", 1)
 
     if result["correct"] and attempt_number == 1:
-        st.success(
-            f"✅ Correct! You entered {result['user_answer']} {result['unit']}."
+        _render_feedback(
+            "correct",
+            "Correct",
+            (
+                f"Your answer was <strong>{_html(result['user_answer'])} "
+                f"{_html(result['unit'])}</strong>. Keep the same setup discipline "
+                "on the next calculation."
+            ),
         )
     elif result["correct"] and attempt_number > 1:
-        st.info(
-            "Nice correction — you got it on retry. This won't count toward your streak, "
-            "but it helps your review progress."
+        _render_feedback(
+            "correct",
+            "Correct on retry",
+            (
+                "Good correction. This retry does not change your streak, "
+                "but it reinforces the calculation path."
+            ),
         )
     else:
-        st.error(
-            f"The correct answer is {result['correct_answer']} {result['unit']}."
+        _render_feedback(
+            "review",
+            "Review this calculation",
+            (
+                f"Expected result: <strong>{_html(result['correct_answer'])} "
+                f"{_html(result['unit'])}</strong>. Compare your setup with the "
+                "walkthrough before moving on."
+            ),
         )
 
-    with st.expander("Step-by-step solution", expanded=not result["correct"]):
-        for step in result["steps"]:
-            st.write(f"• {step}")
+    with st.expander("Solution walkthrough", expanded=not result["correct"]):
+        _render_solution_steps(result["steps"])
 
-    if st.button("Next problem →", type="primary", use_container_width=True):
+    if st.button("Next problem", type="primary", use_container_width=True):
         if (
             st.session_state.timed_mode
             and st.session_state.timed_target_questions is not None
@@ -1170,13 +1526,14 @@ def render_skill_picker(chapter):
 
 
 def render_helper_buttons(chapter, problem):
-    """UNCHANGED."""
+    """Render worksheet support tools as secondary actions."""
+    st.markdown('<div class="practice-tool-label">Calculation support</div>', unsafe_allow_html=True)
     b1, b2, b3 = st.columns(3)
     with b1:
-        ex_type = "primary" if st.session_state.show_example else "secondary"
+        ex_label = "Hide example" if st.session_state.show_example else "Worked example"
         if st.button(
-            "📘 Learn with an example",
-            type=ex_type,
+            ex_label,
+            type="secondary",
             use_container_width=True,
             key="btn_example",
         ):
@@ -1186,20 +1543,20 @@ def render_helper_buttons(chapter, problem):
                 st.session_state.example_problem = pt.generator()
             st.rerun()
     with b2:
-        fm_type = "primary" if st.session_state.show_formula else "secondary"
+        fm_label = "Hide formula" if st.session_state.show_formula else "Formula setup"
         if st.button(
-            "📐 Show formula",
-            type=fm_type,
+            fm_label,
+            type="secondary",
             use_container_width=True,
             key="btn_formula",
         ):
             st.session_state.show_formula = not st.session_state.show_formula
             st.rerun()
     with b3:
-        hint_type = "primary" if st.session_state.show_hint else "secondary"
+        hint_label = "Hide hint" if st.session_state.show_hint else "Hint"
         if st.button(
-            "💡 Get a hint",
-            type=hint_type,
+            hint_label,
+            type="secondary",
             use_container_width=True,
             key="btn_hint",
         ):
@@ -1208,40 +1565,50 @@ def render_helper_buttons(chapter, problem):
 
 
 def render_helper_content(chapter, problem):
-    """UNCHANGED."""
+    """Render formula, hint, and example as learning panels."""
     if st.session_state.show_formula:
-        st.info(f"**Formula / setup**\n\n{chapter.formula}")
+        formula_body = _html(chapter.formula).replace("\n", "<br>")
+        _render_panel("Formula / setup", formula_body)
 
     if st.session_state.show_hint:
         first_steps = problem["steps"][:2]
-        body = "\n\n".join(first_steps)
-        st.info(f"**Hint — how to start**\n\n{body}")
+        body = "<br><br>".join(_html(step) for step in first_steps)
+        _render_panel("Hint: first setup steps", body)
 
     if st.session_state.show_example and st.session_state.example_problem:
         ex = st.session_state.example_problem
-        with st.container(border=True):
-            st.markdown("**📘 Worked example (same problem type)**")
-            st.markdown(f"_Question:_ {ex['question']}")
-            st.markdown("_Solution:_")
-            for step in ex["steps"]:
-                st.write(f"• {step}")
-            st.success(f"Answer: {ex['answer']} {ex['unit']}")
+        steps = "".join(f"<li>{_html(step)}</li>" for step in ex["steps"])
+        st.markdown(
+            f"""
+            <div class="practice-panel">
+                <div class="practice-panel-title">Worked example: same calculation type</div>
+                <div class="practice-panel-body">
+                    <strong>Question:</strong> {_html(ex["question"])}
+                    <ol class="solution-list">{steps}</ol>
+                    <strong>Answer:</strong> {_html(ex["answer"])} {_html(ex["unit"])}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_work_it_out(chapter):
-    """UNCHANGED."""
+    """Suggest a prerequisite chapter without changing practice routing."""
     prereq = get_chapter(chapter.prerequisite_chapter)
     with st.container(border=True):
-        st.markdown("#### 🔧 Work it out")
         st.markdown(
-            f"This topic builds on a more foundational skill: "
-            f"**Ch. {prereq.number} — {prereq.title}**."
-        )
-        st.caption(
-            "Practicing the foundational chapter for a few problems often makes this one click."
+            f"""
+            <div class="practice-panel-title">Foundation review</div>
+            <div class="practice-panel-body">
+                This topic builds on <strong>Ch. {prereq.number}: {_html(prereq.title)}</strong>.
+                A short review set can help confirm the setup before returning here.
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
         if st.button(
-            f"Practice Ch. {prereq.number} first →",
+            f"Practice Ch. {prereq.number} first",
             key="prereq_jump",
             use_container_width=True,
         ):
