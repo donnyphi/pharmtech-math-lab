@@ -359,19 +359,140 @@ with st.sidebar:
 # Dashboard
 # ============================================================
 
+def _render_dashboard_styles():
+    """Dashboard-only visual polish."""
+    st.markdown(
+        """
+        <style>
+            div.stButton > button[kind="primary"] {
+                background-color: #0f766e;
+                border-color: #0f766e;
+                color: #ffffff;
+            }
+            div.stButton > button[kind="primary"]:hover {
+                background-color: #115e59;
+                border-color: #115e59;
+                color: #ffffff;
+            }
+            .dashboard-strip {
+                background: #f0fdfa;
+                border-left: 3px solid #0f766e;
+                border-radius: 6px;
+                color: #134e4a;
+                font-size: 0.9rem;
+                margin-bottom: 1rem;
+                padding: 0.55rem 0.85rem;
+            }
+            .dashboard-hero {
+                background: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 1.05rem 1.1rem;
+            }
+            .dashboard-eyebrow {
+                color: #475569;
+                font-size: 0.74rem;
+                font-weight: 750;
+                letter-spacing: 0.08em;
+                margin-bottom: 0.45rem;
+                text-transform: uppercase;
+            }
+            .dashboard-hero h1 {
+                color: #0f172a;
+                font-size: 1.72rem;
+                line-height: 1.2;
+                margin: 0;
+            }
+            .dashboard-hero p {
+                color: #475569;
+                font-size: 0.98rem;
+                line-height: 1.5;
+                margin: 0.65rem 0 0;
+                max-width: 52rem;
+            }
+            .dashboard-stat-grid {
+                display: grid;
+                gap: 0.55rem;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                margin-top: 0.9rem;
+            }
+            .dashboard-stat {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 0.65rem 0.75rem;
+            }
+            .dashboard-stat span {
+                color: #64748b;
+                display: block;
+                font-size: 0.72rem;
+                font-weight: 750;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+            }
+            .dashboard-stat strong {
+                color: #0f172a;
+                display: block;
+                font-size: 1rem;
+                margin-top: 0.2rem;
+            }
+            .dashboard-card-body {
+                min-height: 8.5rem;
+                padding: 0.8rem 0.15rem 0.25rem;
+            }
+            .dashboard-card-kicker {
+                color: #64748b;
+                font-size: 0.72rem;
+                font-weight: 750;
+                letter-spacing: 0.06em;
+                margin-bottom: 0.45rem;
+                text-transform: uppercase;
+            }
+            .dashboard-card-title {
+                color: #0f172a;
+                font-size: 1.08rem;
+                font-weight: 750;
+                line-height: 1.25;
+                margin-bottom: 0.45rem;
+            }
+            .dashboard-card-copy {
+                color: #475569;
+                font-size: 0.92rem;
+                line-height: 1.45;
+            }
+            .curriculum-topics {
+                color: #475569;
+                font-size: 0.9rem;
+                line-height: 1.5;
+                margin-top: 0.45rem;
+            }
+            @media (max-width: 700px) {
+                .dashboard-stat-grid {
+                    grid-template-columns: 1fr;
+                }
+                .dashboard-hero h1 {
+                    font-size: 1.45rem;
+                }
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _section_label(text):
     """Small uppercase section label."""
     st.markdown(
-        f'<p style="opacity:0.55; font-size:0.8rem; '
+        f'<p style="color:#475569; font-size:0.78rem; '
         f'text-transform:uppercase; letter-spacing:0.06em; '
-        f'margin: 0 0 0.6rem; font-weight:600;">{text}</p>',
+        f'margin: 0 0 0.55rem; font-weight:750;">{text}</p>',
         unsafe_allow_html=True,
     )
 
 
 def render_dashboard():
-    """Action-oriented learning-platform landing page. UNCHANGED structure;
-    only the Timed Practice card itself was reshaped to a single CTA."""
+    """Training dashboard landing page."""
+    _render_dashboard_styles()
     _render_announcement_strip()
     _render_hero()
     st.write("")
@@ -386,89 +507,99 @@ def render_dashboard():
 def _render_announcement_strip():
     """Thin notification banner. Context-aware."""
     if review_queue_size() > 0:
-        message = "<strong>New:</strong> Missed problems are saved for review."
+        message = "<strong>Review queue ready:</strong> Practice fresh problems from the calculation types you missed."
     else:
-        message = "<strong>New:</strong> Coach Mode now gives hints before showing solutions."
+        message = "<strong>Coach Mode:</strong> missed answers route through a hint, retry, and solution walkthrough."
 
     st.markdown(
-        f'<div style="background-color: rgba(28, 131, 225, 0.08); '
-        f'padding: 0.55rem 1rem; border-radius: 6px; '
-        f'border-left: 3px solid #1c83e1; margin-bottom: 1.25rem; '
-        f'font-size: 0.92rem;">'
-        f'🆕 &nbsp;{message}'
-        f'</div>',
+        f'<div class="dashboard-strip">{message}</div>',
         unsafe_allow_html=True,
     )
 
 
 def _render_hero():
-    """Landing-page hero."""
+    """Compact dashboard hero."""
     queue_size = review_queue_size()
-    with st.container(border=True):
-        st.markdown(
-            '<div style="padding: 1rem 0.25rem 0.5rem;">'
-            '<h1 style="margin:0; font-size:2.1rem; line-height:1.2; font-weight:700;">'
-            'DoseDrill: pharmacy math, practiced with purpose.'
-            '</h1>'
-            '<p style="margin:1rem 0 0; font-size:1.05rem; line-height:1.55; opacity:0.78;">'
-'Build accuracy with 500+ randomized pharmacy math question variants across '
-'dosage calculations, reconstitution, dilutions, IV rates, and more — with hints, review queues, and mastery tracking.'
-'</p>'
-            '</div>',
-            unsafe_allow_html=True,
+    attempts = total_attempts()
+    acc = current_accuracy()
+    accuracy_text = f"{acc:.0%}" if acc is not None else "Not started"
+    st.markdown(
+        f"""
+        <div class="dashboard-hero">
+            <div class="dashboard-eyebrow">Pharmacy technician math practice</div>
+            <h1>DoseDrill</h1>
+            <p>
+                Daily calculation practice for dosage, reconstitution, dilutions,
+                IV flow rates, parenteral nutrition, and medication label math.
+            </p>
+            <div class="dashboard-stat-grid">
+                <div class="dashboard-stat">
+                    <span>Session answered</span>
+                    <strong>{attempts}</strong>
+                </div>
+                <div class="dashboard-stat">
+                    <span>Session accuracy</span>
+                    <strong>{accuracy_text}</strong>
+                </div>
+                <div class="dashboard-stat">
+                    <span>Missed review</span>
+                    <strong>{queue_size}</strong>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button(
+            "Start Mixed Practice",
+            key="hero_start_mixed",
+            type="primary",
+            use_container_width=True,
+        ):
+            start_mixed()
+            st.rerun()
+    with b2:
+        review_label = (
+            f"Review Missed Problems ({queue_size})"
+            if queue_size > 0
+            else "Review Missed Problems"
         )
-        st.write("")
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button(
-                "🎯 Start Mixed Practice",
-                key="hero_start_mixed",
-                type="primary",
-                use_container_width=True,
-            ):
-                start_mixed()
-                st.rerun()
-        with b2:
-            review_label = (
-                f"🔁 Review Missed Problems ({queue_size})"
-                if queue_size > 0
-                else "🔁 Review Missed Problems"
-            )
-            if st.button(
-                review_label,
-                key="hero_start_review",
-                type="primary",
-                use_container_width=True,
-                disabled=queue_size == 0,
-            ):
-                practice_from_review(0)
-                st.rerun()
+        if st.button(
+            review_label,
+            key="hero_start_review",
+            type="secondary",
+            use_container_width=True,
+            disabled=queue_size == 0,
+        ):
+            practice_from_review(0)
+            st.rerun()
 
 
 def _render_feature_highlights():
-    """Three-column 'How it works' section."""
-    _section_label("How it works")
+    """Three concrete training tools."""
+    _section_label("Training tools")
 
     features = [
-        ("🔁", "Unlimited Practice",
- "Randomized pharmacy math problems help you build speed and confidence."),
-        ("💡", "Hints Before Answers",
-         "Wrong answers trigger hints and retry chances before the full "
-         "solution is revealed."),
-        ("🎯", "Adaptive Review",
-         "Missed problems are saved into a review queue so you know exactly "
-         "what to practice next."),
+        ("Practice", "Mixed Dosage Practice",
+         "Adaptive problems across the pharmacy math chapters, including dose, concentration, and IV calculations."),
+        ("Coach", "Step-by-Step Coach Mode",
+         "Missed answers prompt a hint, another attempt, and a structured solution walkthrough."),
+        ("Review", "Missed Problem Review",
+         "First-attempt misses are saved by calculation type so review stays targeted."),
     ]
 
     cols = st.columns(3, gap="medium")
-    for col, (icon, title, body) in zip(cols, features):
+    for col, (kicker, title, body) in zip(cols, features):
         with col:
             with st.container(border=True):
                 st.markdown(
-                    f'<div style="text-align:center; padding:0.75rem 0.5rem;">'
-                    f'<div style="font-size:2.4rem; line-height:1; margin-bottom:0.6rem;">{icon}</div>'
-                    f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.45rem;">{title}</div>'
-                    f'<div style="opacity:0.75; font-size:0.92rem; line-height:1.55;">{body}</div>'
+                    f'<div class="dashboard-card-body">'
+                    f'<div class="dashboard-card-kicker">{kicker}</div>'
+                    f'<div class="dashboard-card-title">{title}</div>'
+                    f'<div class="dashboard-card-copy">{body}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -476,7 +607,7 @@ def _render_feature_highlights():
 
 def _render_action_cards():
     """Side-by-side Recommended Focus + Timed Practice."""
-    _section_label("Personalized for you")
+    _section_label("Practice plan")
     col_focus, col_timed = st.columns(2, gap="medium")
     with col_focus:
         _render_focus_card()
@@ -485,45 +616,45 @@ def _render_action_cards():
 
 
 def _render_focus_card():
-    """Action card A: Recommended Focus. UNCHANGED."""
+    """Dashboard training tool: recommended focus."""
     focus_key = recommended_focus_chapter()
     with st.container(border=True):
-        st.markdown("### ⭐  Recommended Focus")
+        st.markdown("### Recommended focus")
         if focus_key:
             ch = get_chapter(focus_key)
-            emoji, status_label = chapter_status(focus_key)
+            _, status_label = chapter_status(focus_key)
             mastery = chapter_mastery(focus_key)
-            st.caption("Your weakest attempted chapter.")
+            st.caption("Lowest mastery score from attempted chapters.")
             st.markdown(f"**Ch. {ch.number} — {ch.title}**")
-            st.markdown(f"{emoji} {status_label}  •  Mastery: {mastery}")
+            st.markdown(f"{status_label}  •  Mastery: {mastery}")
             if st.button(
-                "Practice this →",
+                "Practice this chapter",
                 key="focus_card_practice",
-                type="primary",
+                type="secondary",
                 use_container_width=True,
             ):
                 start_chapter(focus_key)
                 st.rerun()
         elif total_attempts() == 0:
-            st.caption("Complete 5 problems so the app can find your weak topics.")
+            st.caption("Complete a short mixed set so DoseDrill can identify a focus chapter.")
             st.write("")
             st.write("")
             if st.button(
                 "Start Mixed Practice",
                 key="focus_card_no_data",
-                type="primary",
+                type="secondary",
                 use_container_width=True,
             ):
                 start_mixed()
                 st.rerun()
         else:
-            st.caption("Nothing weak right now. Mixed practice will surface new gaps as you go.")
+            st.caption("No clear weak chapter yet. Mixed practice will continue sampling across topics.")
             st.write("")
             st.write("")
             if st.button(
                 "Start Mixed Practice",
                 key="focus_card_all_mastered",
-                type="primary",
+                type="secondary",
                 use_container_width=True,
             ):
                 start_mixed()
@@ -531,24 +662,18 @@ def _render_focus_card():
 
 
 def _render_timed_practice_card():
-    """Action card B: Timed Practice (single-CTA version).
-
-    Shows only the title, caption, and one primary button. Clicking the
-    button sets timed_setup_open = True; the page routing then renders
-    render_timed_setup() (the picker overlay) instead of dashboard. The
-    four sprint options live on the setup view, not directly on the card.
-    """
+    """Dashboard training tool: timed drills."""
     with st.container(border=True):
-        st.markdown("### ⏱  Timed Practice")
-        st.caption("Build speed under realistic time pressure.")
+        st.markdown("### Timed drills")
+        st.caption("Short mixed sets for speed and accuracy under a clock.")
         # Two blank lines roughly match the visual height of _render_focus_card
-        # so the Personalized-for-you row keeps its parity across states.
+        # so the practice plan row keeps its parity across states.
         st.write("")
         st.write("")
         if st.button(
-            "Start Timed Practice →",
+            "Choose timed drill",
             key="timed_card_start",
-            type="primary",
+            type="secondary",
             use_container_width=True,
         ):
             st.session_state.timed_setup_open = True
@@ -556,16 +681,14 @@ def _render_timed_practice_card():
 
 
 def _render_review_expander():
-    """Compact per-item queue list. Renders only when queue is non-empty.
-    UNCHANGED."""
+    """Compact per-item queue list. Renders only when queue is non-empty."""
     queue_size = review_queue_size()
     if queue_size == 0:
         return
 
-    with st.expander(f"View all missed problems ({queue_size})"):
+    with st.expander(f"Missed problem queue ({queue_size})"):
         st.caption(
-            "Each entry generates a fresh problem of the same type. "
-            "The original is removed from the queue once you start."
+            "Each row starts a fresh problem from the same calculation type."
         )
         for i, entry in enumerate(st.session_state.review_queue):
             ch = get_chapter(entry["chapter_key"])
@@ -578,7 +701,7 @@ def _render_review_expander():
             with c_btn:
                 st.write("")
                 if st.button(
-                    "Practice →",
+                    "Practice",
                     key=f"review_expander_{i}",
                     use_container_width=True,
                 ):
@@ -591,33 +714,27 @@ def _render_review_expander():
 
 
 def _render_learning_path():
-    """Three-tier curriculum preview. UNCHANGED."""
-    _section_label("The full curriculum")
+    """Compact curriculum preview."""
+    _section_label("Curriculum map")
 
     tiers = [
-        ("Foundation", "Ch. 1–4",
-         "Build the universal ratio-and-proportion method.",
-         "Parenteral doses · Powdered drugs · Percents · Solutions"),
-        ("Applications", "Ch. 5–7",
-         "Apply the method to body-based and infusion dosing.",
-         "Body weight · BSA · Infusion rates"),
-        ("Advanced", "Ch. 8–10",
-         "Specialized dosing techniques beyond the standard ratio.",
+        ("Ch. 1-4", "Foundation calculations",
+         "Parenteral doses · Powdered drugs · Percents · Ratio-strength solutions"),
+        ("Ch. 5-7", "Patient-based dosing",
+         "Body weight · Body surface area · Infusion and drip rates"),
+        ("Ch. 8-10", "Advanced pharmacy math",
          "Dilutions · Parenteral nutrition · Medication labels"),
     ]
 
     cols = st.columns(3, gap="medium")
-    for col, (tier_name, ch_range, description, topics) in zip(cols, tiers):
+    for col, (ch_range, tier_name, topics) in zip(cols, tiers):
         with col:
             with st.container(border=True):
                 st.markdown(
-                    f'<div style="padding:0.5rem 0.25rem;">'
-                    f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.2rem;">{tier_name}</div>'
-                    f'<div style="opacity:0.55; font-size:0.78rem; '
-                    f'text-transform:uppercase; letter-spacing:0.06em; '
-                    f'margin-bottom:0.75rem;">{ch_range}</div>'
-                    f'<div style="font-size:0.95rem; opacity:0.85; margin-bottom:0.6rem; line-height:1.5;">{description}</div>'
-                    f'<div style="font-size:0.85rem; opacity:0.7; line-height:1.6;">{topics}</div>'
+                    f'<div class="dashboard-card-body">'
+                    f'<div class="dashboard-card-kicker">{ch_range}</div>'
+                    f'<div class="dashboard-card-title">{tier_name}</div>'
+                    f'<div class="curriculum-topics">{topics}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
