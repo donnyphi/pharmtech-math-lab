@@ -59,6 +59,209 @@ st.set_page_config(
 )
 init_tracker()
 
+
+def _render_responsive_styles():
+    """Mobile layout polish while preserving the existing desktop design."""
+    st.markdown(
+        """
+        <style>
+            .calculator-result {
+                margin: 1rem 0 0.35rem;
+            }
+            .calculator-result-label {
+                display: inline;
+            }
+            .calculator-result-value {
+                color: #111827;
+                display: inline;
+                font-weight: 700;
+            }
+            @media (max-width: 700px) {
+                html, body, [data-testid="stAppViewContainer"] {
+                    overflow-x: hidden;
+                }
+                [data-testid="stAppViewContainer"] .main .block-container {
+                    padding: 1rem 0.9rem 2rem;
+                    max-width: 100%;
+                }
+                [data-testid="stSidebar"] {
+                    max-width: 92vw;
+                }
+                [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+                [data-testid="stSidebar"] label,
+                [data-testid="stSidebar"] button {
+                    line-height: 1.25;
+                }
+                [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+                    font-size: 1.35rem;
+                }
+                [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+                    font-size: 0.78rem;
+                }
+                [data-testid="stSidebar"] div.stButton > button {
+                    justify-content: center;
+                    min-height: 44px;
+                    padding: 0.55rem 0.65rem;
+                    white-space: normal;
+                }
+                [data-testid="stSidebar"] .stRadio label {
+                    align-items: center;
+                    min-height: 36px;
+                }
+                [data-testid="stNumberInput"] input {
+                    min-height: 44px;
+                }
+                [data-testid="stNumberInput"] button {
+                    min-height: 44px;
+                }
+                [data-testid="stHorizontalBlock"] {
+                    flex-wrap: wrap;
+                    gap: 0.75rem !important;
+                }
+                [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+                    flex: 1 1 100% !important;
+                    min-width: 100% !important;
+                    width: 100% !important;
+                }
+                div.stButton > button {
+                    min-height: 44px;
+                    padding: 0.6rem 0.75rem;
+                    white-space: normal;
+                }
+                h1 {
+                    font-size: 1.65rem !important;
+                    line-height: 1.2 !important;
+                }
+                h2 {
+                    font-size: 1.35rem !important;
+                    line-height: 1.25 !important;
+                }
+                h3 {
+                    font-size: 1.12rem !important;
+                    line-height: 1.3 !important;
+                }
+                [data-testid="stMarkdownContainer"] p {
+                    line-height: 1.45;
+                }
+                [data-testid="stExpander"] summary {
+                    min-height: 44px;
+                }
+                .dashboard-hero-shell {
+                    padding: 0.45rem 0.05rem 0.15rem !important;
+                }
+                .dashboard-hero-shell h1 {
+                    font-size: 1.55rem !important;
+                    line-height: 1.2 !important;
+                }
+                .dashboard-hero-shell p {
+                    font-size: 0.95rem !important;
+                    line-height: 1.45 !important;
+                    margin-top: 0.75rem !important;
+                }
+                .dashboard-feature-card {
+                    padding: 0.65rem 0.5rem !important;
+                    text-align: left !important;
+                }
+                .dashboard-feature-icon {
+                    font-size: 1.65rem !important;
+                    margin-bottom: 0.4rem !important;
+                }
+                .dashboard-curriculum-card {
+                    padding: 0.35rem 0.1rem !important;
+                }
+                .practice-header {
+                    margin-bottom: 0.85rem;
+                    padding-bottom: 0.75rem;
+                }
+                .practice-header h2 {
+                    font-size: 1.16rem !important;
+                    line-height: 1.25 !important;
+                }
+                .practice-header p,
+                .practice-meta-value,
+                .practice-panel-body,
+                .practice-feedback-body {
+                    font-size: 0.9rem;
+                }
+                .practice-meta-grid {
+                    gap: 0.5rem;
+                    margin-bottom: 0.75rem;
+                }
+                .practice-meta-item {
+                    padding: 0.62rem 0.7rem;
+                }
+                .practice-prompt {
+                    margin-top: 0.25rem;
+                    padding: 0.82rem 0.85rem;
+                }
+                .practice-question {
+                    font-size: 1.02rem !important;
+                    line-height: 1.45 !important;
+                }
+                .practice-value {
+                    display: inline;
+                    padding: 0 0.14rem;
+                }
+                .practice-target,
+                .practice-panel,
+                .practice-feedback {
+                    padding: 0.75rem 0.8rem;
+                }
+                .practice-unit-badge {
+                    min-width: auto;
+                }
+                .solution-list {
+                    padding-left: 1.05rem;
+                }
+                .solution-list li {
+                    margin: 0.38rem 0;
+                }
+                .calculator-result {
+                    background: #fff7f7;
+                    border: 1px solid rgba(255, 75, 75, 0.22);
+                    border-radius: 6px;
+                    margin-top: 0.85rem;
+                    padding: 0.85rem 0.9rem;
+                }
+                .calculator-result-label {
+                    color: #6b7280;
+                    display: block;
+                    font-size: 0.78rem;
+                    font-weight: 700;
+                    letter-spacing: 0.06em;
+                    margin-bottom: 0.25rem;
+                    text-transform: uppercase;
+                }
+                .calculator-result-value {
+                    display: block;
+                    font-size: 1.25rem;
+                    font-weight: 750;
+                    line-height: 1.2;
+                }
+            }
+            @media (max-width: 430px) {
+                [data-testid="stAppViewContainer"] .main .block-container {
+                    padding-left: 0.75rem;
+                    padding-right: 0.75rem;
+                }
+                .dashboard-feature-card {
+                    padding: 0.55rem 0.35rem !important;
+                }
+                .dashboard-feature-icon {
+                    font-size: 1.45rem !important;
+                }
+                .practice-prompt {
+                    border-left-width: 3px;
+                }
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+_render_responsive_styles()
+
 # Valid pages after the v6.4 nav simplification. Progress is gone; its
 # content lives on the Practice page's empty state.
 _VALID_PAGES = ["Dashboard", "Practice", "Calculator"]
@@ -406,7 +609,7 @@ def _render_hero():
     queue_size = review_queue_size()
     with st.container(border=True):
         st.markdown(
-            '<div style="padding: 1rem 0.25rem 0.5rem;">'
+            '<div class="dashboard-hero-shell" style="padding: 1rem 0.25rem 0.5rem;">'
             '<h1 style="margin:0; font-size:2.1rem; line-height:1.2; font-weight:700;">'
             'DoseDrill: pharmacy math, practiced with purpose.'
             '</h1>'
@@ -465,8 +668,8 @@ def _render_feature_highlights():
         with col:
             with st.container(border=True):
                 st.markdown(
-                    f'<div style="text-align:center; padding:0.75rem 0.5rem;">'
-                    f'<div style="font-size:2.4rem; line-height:1; margin-bottom:0.6rem;">{icon}</div>'
+                    f'<div class="dashboard-feature-card" style="text-align:center; padding:0.75rem 0.5rem;">'
+                    f'<div class="dashboard-feature-icon" style="font-size:2.4rem; line-height:1; margin-bottom:0.6rem;">{icon}</div>'
                     f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.45rem;">{title}</div>'
                     f'<div style="opacity:0.75; font-size:0.92rem; line-height:1.55;">{body}</div>'
                     f'</div>',
@@ -611,7 +814,7 @@ def _render_learning_path():
         with col:
             with st.container(border=True):
                 st.markdown(
-                    f'<div style="padding:0.5rem 0.25rem;">'
+                    f'<div class="dashboard-curriculum-card" style="padding:0.5rem 0.25rem;">'
                     f'<div style="font-weight:600; font-size:1.05rem; margin-bottom:0.2rem;">{tier_name}</div>'
                     f'<div style="opacity:0.55; font-size:0.78rem; '
                     f'text-transform:uppercase; letter-spacing:0.06em; '
@@ -1641,7 +1844,15 @@ else:
             "Stock strength (mg per mL)", min_value=0.01, value=250.0, step=10.0
         )
         volume = dose / strength
-        st.write(f"Volume needed: **{volume:.2f} mL**")
+        st.markdown(
+            f"""
+            <div class="calculator-result">
+                <div class="calculator-result-label">Volume needed:</div>
+                <div class="calculator-result-value">{volume:.2f} mL</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.caption(
             f"Formula: volume = dose / strength = {dose} / {strength} = {volume:.2f} mL."
         )
