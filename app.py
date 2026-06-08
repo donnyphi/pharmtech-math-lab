@@ -403,7 +403,8 @@ def practice_from_review(index):
     """Pop an entry from the review queue and start practicing that type."""
     entry = pop_review_queue_at(index)
     if entry:
-        start_chapter(entry["chapter_key"], entry["problem_type_key"])
+        problem = entry["problem"]
+        start_chapter(problem["chapter_key"], problem["problem_type_key"])
 
 
 def start_timed_sprint(timed_type):
@@ -452,11 +453,7 @@ def check_answer(problem, user_answer):
     if is_first_submission:
         record_attempt(problem["chapter_key"], problem["problem_type_key"], is_correct)
         if not is_correct:
-            push_review_queue(
-                problem["chapter_key"],
-                problem["problem_type_key"],
-                problem["question"],
-            )
+            push_review_queue(problem, user_answer)
         # Timed sprint counters. Independent of record_attempt above.
         if st.session_state.timed_mode:
             st.session_state.timed_answered += 1
@@ -632,20 +629,25 @@ def _render_hero():
                 start_mixed()
                 st.rerun()
         with b2:
-            review_label = (
-                f"🔁 Review Missed Problems ({queue_size})"
-                if queue_size > 0
-                else "🔁 Review Missed Problems"
-            )
-            if st.button(
-                review_label,
-                key="hero_start_review",
-                type="primary",
-                use_container_width=True,
-                disabled=queue_size == 0,
-            ):
-                practice_from_review(0)
-                st.rerun()
+            # Repointed: this now scrolls to the "Missed problems" review
+            # section below (anchor="missed-problems") instead of launching a
+            # fresh problem. A link_button is a real in-page anchor, so it needs
+            # no new session state or routing.
+            if queue_size > 0:
+                st.link_button(
+                    f"🔁 Review Missed Problems ({queue_size})",
+                    "#missed-problems",
+                    type="primary",
+                    use_container_width=True,
+                )
+            else:
+                st.button(
+                    "🔁 Review Missed Problems",
+                    key="hero_start_review",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=True,
+                )
 
 
 def _render_feature_highlights():
@@ -758,39 +760,85 @@ def _render_timed_practice_card():
             st.rerun()
 
 
+def _render_review_card(entry):
+    """Render the review detail for one missed problem.
+
+    Shows only facts we actually captured at miss time: the frozen question,
+    the student's answer beside the correct answer, and the worked solution.
+    No inferred mistake type — the student compares their own setup to the
+    steps. Reuses the practice-page renderers and styles for a consistent look.
+    """
+    problem = entry["problem"]
+    unit = problem.get("unit", "")
+    user_answer = entry.get("user_answer")
+    correct_answer = problem.get("answer")
+
+    _render_panel("The problem", _html(problem["question"]))
+
+    c_you, c_correct = st.columns(2)
+    with c_you:
+        st.markdown(
+            f'<div class="practice-meta-item">'
+            f'<div class="practice-meta-label">Your answer</div>'
+            f'<div class="practice-meta-value">{_html(user_answer)} {_html(unit)}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with c_correct:
+        st.markdown(
+            f'<div class="practice-meta-item">'
+            f'<div class="practice-meta-label">Correct answer</div>'
+            f'<div class="practice-meta-value">{_html(correct_answer)} {_html(unit)}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+    st.markdown(
+        '<div class="practice-tool-label">Compare your setup to the worked '
+        'solution below.</div>',
+        unsafe_allow_html=True,
+    )
+    _render_solution_steps(problem["steps"])
+
+
 def _render_review_expander():
-    """Compact per-item queue list. Renders only when queue is non-empty.
-    UNCHANGED."""
+    """Per-item review surface on the dashboard. Each missed problem expands to
+    show the actual attempt (frozen question, your answer vs the correct answer,
+    and the worked solution), plus a 'Practice a similar problem' action.
+    Renders only when the queue is non-empty. The first item is expanded by
+    default so the most recent miss is visible without a click; the hero
+    'Review Missed Problems' button scrolls here via the section anchor."""
     queue_size = review_queue_size()
     if queue_size == 0:
         return
 
-    with st.expander(f"View all missed problems ({queue_size})"):
-        st.caption(
-            "Each entry generates a fresh problem of the same type. "
-            "The original is removed from the queue once you start."
-        )
-        for i, entry in enumerate(st.session_state.review_queue):
-            ch = get_chapter(entry["chapter_key"])
-            c_text, c_btn = st.columns([5, 1])
-            with c_text:
-                st.markdown(
-                    f"**Ch. {ch.number}.** {ch.title}  \n"
-                    f"_{entry['question_preview']}_"
-                )
-            with c_btn:
-                st.write("")
-                if st.button(
-                    "Practice →",
-                    key=f"review_expander_{i}",
-                    use_container_width=True,
-                ):
-                    practice_from_review(i)
-                    st.rerun()
-        st.write("")
-        if st.button("Clear review queue", key="review_expander_clear"):
-            clear_review_queue()
-            st.rerun()
+    _render_practice_styles()  # idempotent; styles the review cards
+    st.write("")
+    st.subheader(f"Missed problems ({queue_size})", anchor="missed-problems")
+    st.caption("Review each one, then practice a fresh version of the same type.")
+
+    for i, entry in enumerate(st.session_state.review_queue):
+        problem = entry["problem"]
+        chapter = get_chapter(problem["chapter_key"])
+        question = problem["question"]
+        preview = question if len(question) <= 80 else question[:77] + "..."
+        title = f'Ch. {chapter.number} · {chapter.title} — "{preview}"'
+        with st.expander(title, expanded=(i == 0)):
+            _render_review_card(entry)
+            if st.button(
+                "Practice a similar problem →",
+                key=f"review_practice_{i}",
+                type="primary",
+                use_container_width=True,
+            ):
+                practice_from_review(i)
+                st.rerun()
+
+    st.write("")
+    if st.button("Clear review queue", key="review_clear"):
+        clear_review_queue()
+        st.rerun()
 
 
 def _render_learning_path():
@@ -1448,13 +1496,15 @@ def render_practice_empty_state():
                 start_mixed()
                 st.rerun()
         with c2:
+            # Review lives on the Dashboard; send the student there rather than
+            # launching a fresh problem (which is "practice", not "review").
             if st.button(
                 f"🔁 Review Missed Problems ({queue_size})",
                 key="practice_empty_review",
                 type="primary",
                 use_container_width=True,
             ):
-                practice_from_review(0)
+                st.session_state.current_page = "Dashboard"
                 st.rerun()
     else:
         with st.container(border=True):

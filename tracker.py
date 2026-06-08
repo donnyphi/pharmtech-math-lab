@@ -280,18 +280,25 @@ def recommend_weak_topic():
 REVIEW_QUEUE_MAX = 20
 
 
-def push_review_queue(chapter_key, problem_type_key, question):
-    """Add a missed problem's metadata to the review queue.
+def push_review_queue(problem, user_answer):
+    """Snapshot a missed problem so the student can review the actual attempt.
 
-    Stores only what's needed to regenerate a fresh problem of the same type:
-    the chapter key, problem-type key, and a short question preview for the
-    queue display. FIFO eviction once the queue exceeds REVIEW_QUEUE_MAX.
+    Stores a frozen copy of the full problem dict plus the user's (wrong)
+    answer. The snapshot is what makes review truthful: the generators are
+    random, so the only way to show the exact problem the student missed is to
+    keep it. The problem dict holds only primitives and a list of strings (the
+    generator callable lives on ProblemType, never in the dict), so a shallow
+    copy is a safe, self-contained snapshot.
+
+    Everything the review card needs derives from the snapshot:
+    question/answer/unit/steps from the generator, and the stamped
+    chapter_key/problem_type_key/labels added in new_problem.
+
+    FIFO eviction once the queue exceeds REVIEW_QUEUE_MAX.
     """
-    preview = question if len(question) <= 140 else question[:137] + "..."
     entry = {
-        "chapter_key": chapter_key,
-        "problem_type_key": problem_type_key,
-        "question_preview": preview,
+        "problem": dict(problem),
+        "user_answer": user_answer,
     }
     queue = st.session_state.review_queue
     queue.append(entry)
