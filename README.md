@@ -51,5 +51,3 @@ Built for my pharm-tech cohort ahead of the June certification exam.
 ## Author
 
 Built by Donny Nguyen
-
-.
